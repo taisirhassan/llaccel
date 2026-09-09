@@ -1,0 +1,9 @@
+build/
+.venv/
+__pycache__/
+*.pyc
+obj_dir/
+*.vcd
+*.fst
+data/
+checkpoints/
