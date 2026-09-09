@@ -1,0 +1,16 @@
+# Elaborate llaccel_core with the slang SystemVerilog frontend and write a
+# Verilog-2005 netlist that the OpenROAD-flow-scripts Yosys (no SV support)
+# can synthesize. Invoked by synth/run_orfs.sh with:
+#   yosys -c ... -DFUSION=<0|1> -DOUT=<path>
+# Usage: yosys -p "plugin -i slang" -s synth/yosys/elab_core.ys  (with env FUSION, OUT)
+plugin -i slang
+tee -q -o /dev/null log -n
+read_slang -f rtl/filelist.f --top llaccel_core -G EPILOGUE_FUSION=$FUSION
+hierarchy -top llaccel_core -check
+proc
+flatten
+opt -full
+memory -nomap
+opt_clean
+stat
+write_verilog -noattr -noexpr -nohex $OUT
