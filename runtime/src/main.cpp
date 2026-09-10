@@ -64,7 +64,7 @@ Args parseArgs(std::span<char*> argv) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 2) { std::print("{}", kUsage); return 2; }
+  if (argc < 2 || std::string_view(argv[1]) == "--help" || std::string_view(argv[1]) == "-h") { std::print("{}", kUsage); return argc < 2 ? 2 : 0; }
   Args a = parseArgs({argv, size_t(argc)});
   try {
     Llbin bin = Llbin::load(a.bin);
