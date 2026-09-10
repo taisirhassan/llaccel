@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(llaccel LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
@@ -41,9 +41,10 @@ if(LLACCEL_RTL)
         SOURCES ${RTL_SOURCES}
         TOP_MODULE llaccel_top
         PREFIX Vtop_v${variant}
+        INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/rtl
         TRACE_FST
         VERILATOR_ARGS -GEPILOGUE_FUSION=${fusion} -Wno-fatal -O3 --x-assign fast --x-initial fast
-                       -CFLAGS "-O2 -std=c++23")
+                       -CFLAGS "-O2 -std=c++26")
       target_link_libraries(llaccel_runtime PUBLIC rtl_v${variant})
     endforeach()
     target_compile_definitions(llaccel_runtime PRIVATE LLACCEL_HAVE_RTL=1)

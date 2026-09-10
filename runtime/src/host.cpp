@@ -1,9 +1,11 @@
 #include "llaccel/host.h"
 
+#include <algorithm>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <print>
+#include <ranges>
 #include <stdexcept>
 
 namespace llaccel {
@@ -27,11 +29,9 @@ std::vector<uint32_t> Tokenizer::encode(const std::string& text) const {
     size_t len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : 4;
     std::string ch = text.substr(i, len);
     i += len;
-    uint32_t id = UINT32_MAX;
-    for (uint32_t k = 0; k < itos.size(); ++k)
-      if (itos[k] == ch) { id = k; break; }
-    if (id == UINT32_MAX) throw std::runtime_error("character not in vocabulary: '" + ch + "'");
-    ids.push_back(id);
+    auto it = std::ranges::find(itos, ch);
+    if (it == itos.end()) throw std::runtime_error("character not in vocabulary: '" + ch + "'");
+    ids.push_back(uint32_t(it - itos.begin()));
   }
   return ids;
 }
@@ -55,9 +55,7 @@ Host::Host(const Llbin& bin, Device& dev, const Tokenizer& tok) : bin_(bin), dev
   inRowBytes_ = d.at("input").at("row_bytes").get<uint64_t>();
   lgAddr_ = d.at("logits").at("addr").get<uint64_t>();
   lgRowBytes_ = d.at("logits").at("row_bytes").get<uint64_t>();
-  prefillM_ = 0;
-  for (const auto& p : bin.programs)
-    if (p.M > prefillM_) prefillM_ = p.M;
+  prefillM_ = std::ranges::max(bin.programs | std::views::transform(&Program::M));
   if (prefillM_ == 0) throw std::runtime_error("no programs in llbin");
   if (tok.itos.size() != vocab_) throw std::runtime_error("tokenizer size != model vocab");
   if (embRowBytes_ < dim_ * 2 || inRowBytes_ < dim_ * 2) throw std::runtime_error("embedding/input row too small for dim");
@@ -80,15 +78,10 @@ StepResult Host::launch(const std::vector<uint32_t>& rowTokens, uint32_t M, uint
   if (pos + M > maxSeq_) throw std::runtime_error("sequence exceeds max_seq");
   for (uint32_t r = 0; r < M; ++r) writeInputRow(r, r < rowTokens.size() ? rowTokens[r] : UINT32_MAX);
   const Program& prog = bin_.programForM(M);
-  StepResult s;
-  s.pos = pos;
-  s.M = M;
-  s.perf = dev_.run(prog.pc, pos);
+  StepResult s{.pos = pos, .M = M, .argmax = 0, .logits = {}, .perf = dev_.run(prog.pc, pos)};
   s.logits = readLogitsRow(logitsRow);
-  uint32_t best = 0;
-  for (uint32_t i = 1; i < vocab_; ++i)
-    if (s.logits[i] > s.logits[best]) best = i;
-  s.argmax = best;
+  // Greedy: first index of the maximum (ties -> lowest index, same as numpy argmax).
+  s.argmax = uint32_t(std::ranges::max_element(s.logits) - s.logits.begin());
   return s;
 }
 
@@ -105,7 +98,7 @@ GenerationResult Host::generate(const std::string& prompt, uint32_t nTokens, boo
                                r.promptTokens.begin() + std::min<uint32_t>(L, (c + 1) * prefillM_));
     uint32_t lastRow = (c == nChunks - 1) ? (L - 1) % prefillM_ : prefillM_ - 1;
     StepResult s = launch(rows, prefillM_, c * prefillM_, lastRow);
-    if (verbose) std::printf("  prefill chunk %u/%u: pos=%u cycles=%llu\n", c + 1, nChunks, c * prefillM_, (unsigned long long)s.perf[PERF_CYCLES]);
+    if (verbose) std::println("  prefill chunk {}/{}: pos={} cycles={}", c + 1, nChunks, c * prefillM_, s.perf[PERF_CYCLES]);
     next = s.argmax;
     r.steps.push_back(std::move(s));
   }
@@ -113,15 +106,15 @@ GenerationResult Host::generate(const std::string& prompt, uint32_t nTokens, boo
     r.generated.push_back(next);
     if (L + i + 1 >= maxSeq_) break;  // no room for another position
     StepResult s = launch({next}, 1, L + i, 0);
-    if (verbose) std::printf("  decode %u/%u: pos=%u cycles=%llu tok=%u '%s'\n", i + 1, nTokens, L + i,
-                             (unsigned long long)s.perf[PERF_CYCLES], next, tok_.itos[next].c_str());
+    if (verbose)
+      std::println("  decode {}/{}: pos={} cycles={} tok={} '{}'", i + 1, nTokens, L + i, s.perf[PERF_CYCLES], next, tok_.itos[next]);
     next = s.argmax;
     r.steps.push_back(std::move(s));
   }
   auto t1 = std::chrono::steady_clock::now();
   for (const auto& s : r.steps)
     for (uint32_t i = 0; i < kNumPerf; ++i) r.total[i] += s.perf[i];
-  if (verbose) std::printf("  wall time: %.2f s\n", std::chrono::duration<double>(t1 - t0).count());
+  if (verbose) std::println("  wall time: {:.2f} s", std::chrono::duration<double>(t1 - t0).count());
   return r;
 }
 
@@ -131,22 +124,17 @@ nlohmann::json GenerationResult::toJson() const {
   j["generated"] = generated;
   std::vector<uint32_t> am;
   std::vector<std::vector<int16_t>> lg;
-  nlohmann::json steps = nlohmann::json::array();
-  for (const auto& s : this->steps) {
+  nlohmann::json stepsJ = nlohmann::json::array();
+  for (const auto& s : steps) {
     am.push_back(s.argmax);
     lg.push_back(s.logits);
-    nlohmann::json sj;
-    sj["pos"] = s.pos;
-    sj["M"] = s.M;
-    sj["argmax"] = s.argmax;
     nlohmann::json pj;
     for (uint32_t i = 0; i < kNumPerf; ++i) pj[std::string(kPerfNames[i])] = s.perf[i];
-    sj["perf"] = pj;
-    steps.push_back(sj);
+    stepsJ.push_back({{"pos", s.pos}, {"M", s.M}, {"argmax", s.argmax}, {"perf", pj}});
   }
   j["argmax_per_step"] = am;
   j["logits_last_rows"] = lg;
-  j["steps"] = steps;
+  j["steps"] = stepsJ;
   nlohmann::json tj;
   for (uint32_t i = 0; i < kNumPerf; ++i) tj[std::string(kPerfNames[i])] = total[i];
   j["perf_total"] = tj;
@@ -161,43 +149,44 @@ bool verifyAgainstGolden(const GenerationResult& r, const std::string& goldenPat
   auto gg = g.at("generated").get<std::vector<uint32_t>>();
   auto ga = g.at("argmax_per_step").get<std::vector<uint32_t>>();
   bool ok = true;
-  if (gp != r.promptTokens) { std::printf("VERIFY: prompt tokens differ from golden\n"); ok = false; }
+  if (gp != r.promptTokens) { std::println("VERIFY: prompt tokens differ from golden"); ok = false; }
   size_t n = std::min(ga.size(), r.steps.size());
   for (size_t i = 0; i < n; ++i)
     if (ga[i] != r.steps[i].argmax) {
-      std::printf("VERIFY: step %zu argmax %u != golden %u (pos=%u M=%u)\n", i, r.steps[i].argmax, ga[i], r.steps[i].pos, r.steps[i].M);
+      std::println("VERIFY: step {} argmax {} != golden {} (pos={} M={})", i, r.steps[i].argmax, ga[i], r.steps[i].pos, r.steps[i].M);
       ok = false;
       break;
     }
   if (ok && ga.size() != r.steps.size())
-    std::printf("VERIFY: note: %zu steps run vs %zu golden steps (compared the first %zu)\n", r.steps.size(), ga.size(), n);
+    std::println("VERIFY: note: {} steps run vs {} golden steps (compared the first {})", r.steps.size(), ga.size(), n);
   if (ok && g.contains("logits_last_rows")) {
     auto gl = g.at("logits_last_rows").get<std::vector<std::vector<int16_t>>>();
     for (size_t i = 0; i < std::min(gl.size(), r.steps.size()); ++i)
       if (gl[i] != r.steps[i].logits) {
-        size_t k = 0;
-        while (k < gl[i].size() && k < r.steps[i].logits.size() && gl[i][k] == r.steps[i].logits[k]) ++k;
-        std::printf("VERIFY: step %zu logits differ at index %zu: %d vs golden %d\n", i, k, k < r.steps[i].logits.size() ? r.steps[i].logits[k] : 0,
-                    k < gl[i].size() ? gl[i][k] : 0);
+        auto [a, b] = std::ranges::mismatch(gl[i], r.steps[i].logits);
+        size_t k = size_t(a - gl[i].begin());
+        std::println("VERIFY: step {} logits differ at index {}: {} vs golden {}", i, k,
+                     b != r.steps[i].logits.end() ? *b : 0, a != gl[i].end() ? *a : 0);
         ok = false;
         break;
       }
   }
   size_t ng = std::min(gg.size(), r.generated.size());
   for (size_t i = 0; ok && i < ng; ++i)
-    if (gg[i] != r.generated[i]) { std::printf("VERIFY: generated token %zu differs\n", i); ok = false; }
-  if (verbose || !ok) std::printf("VERIFY: %s (%zu launches, %zu generated tokens compared)\n", ok ? "MATCH" : "MISMATCH", n, ng);
+    if (gg[i] != r.generated[i]) { std::println("VERIFY: generated token {} differs", i); ok = false; }
+  if (verbose || !ok) std::println("VERIFY: {} ({} launches, {} generated tokens compared)", ok ? "MATCH" : "MISMATCH", n, ng);
   return ok;
 }
 
 void printPerf(const PerfCounters& p, uint32_t launches) {
-  std::printf("Performance (%u launches)\n-------------------------\n", launches);
-  for (uint32_t i = 0; i < kNumPerf; ++i) std::printf("  %-22s %14llu\n", std::string(kPerfNames[i]).c_str(), (unsigned long long)p[i]);
+  std::println("Performance ({} launches)\n-------------------------", launches);
+  for (uint32_t i = 0; i < kNumPerf; ++i) std::println("  {:<22} {:>14}", kPerfNames[i], p[i]);
   if (p[PERF_CYCLES]) {
-    std::printf("  GEMM utilization       %6.2f %%\n", 100.0 * double(p[PERF_GEMM_MAC_CYCLES]) / double(p[PERF_CYCLES]));
-    std::printf("  ATTN MAC utilization   %6.2f %%\n", 100.0 * double(p[PERF_ATTN_MAC_CYCLES]) / double(p[PERF_CYCLES]));
-    std::printf("  CP wait stalls         %6.2f %%\n", 100.0 * double(p[PERF_CP_STALL_WAIT]) / double(p[PERF_CYCLES]));
-    std::printf("  DMA busy               %6.2f %%\n", 100.0 * double(p[PERF_DMA_BUSY]) / double(p[PERF_CYCLES]));
+    auto pctOf = [&](uint64_t v) { return 100.0 * double(v) / double(p[PERF_CYCLES]); };
+    std::println("  GEMM utilization       {:6.2f} %", pctOf(p[PERF_GEMM_MAC_CYCLES]));
+    std::println("  ATTN MAC utilization   {:6.2f} %", pctOf(p[PERF_ATTN_MAC_CYCLES]));
+    std::println("  CP wait stalls         {:6.2f} %", pctOf(p[PERF_CP_STALL_WAIT]));
+    std::println("  DMA busy               {:6.2f} %", pctOf(p[PERF_DMA_BUSY]));
   }
 }
 

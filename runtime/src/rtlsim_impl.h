@@ -70,9 +70,11 @@ class RtlSim final : public Device {
     top_->clk = 1;
     top_->eval();
     // Request handshake as seen by the DUT at this edge: valid && ready (ready was driven last cycle).
+    // wstrb is 64 bits -> a plain uint64_t in Verilator; wdata is 512 bits -> VlWide.
+    uint64_t wstrb = top_->dram_req_wstrb;
     bool accepted = dram_.request(top_->dram_req_valid && top_->dram_req_ready, top_->dram_req_we, top_->dram_req_addr,
                                   reinterpret_cast<const uint8_t*>(top_->dram_req_wdata.data()),
-                                  reinterpret_cast<const uint8_t*>(top_->dram_req_wstrb.data()));
+                                  reinterpret_cast<const uint8_t*>(&wstrb));
     (void)accepted;
     uint8_t rdata[64];
     bool rsp = dram_.tick(rdata);
