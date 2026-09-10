@@ -1,0 +1,17 @@
++incdir+rtl
+rtl/llaccel_pkg.sv
+rtl/llaccel_luts_pkg.sv
+rtl/sync_fifo.sv
+rtl/isqrt.sv
+rtl/udiv.sv
+rtl/sram_xbar.sv
+rtl/dram_arb.sv
+rtl/perf_counters.sv
+rtl/dma_engine.sv
+rtl/gemm_engine.sv
+rtl/vec_engine.sv
+rtl/attn_engine.sv
+rtl/cmd_proc.sv
+rtl/llaccel_core.sv
+rtl/sram_bank.sv
+rtl/llaccel_top.sv
