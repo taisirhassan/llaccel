@@ -357,7 +357,14 @@ class GoldenModel:
         return logits[0]
 
     def generate(self, prompt_tokens, n_tokens: int, acts: list | None = None) -> dict:
-        """Greedy generation exactly as the runtime does it. Returns the golden.json record."""
+        """Greedy generation with exactly the launch sequence of the C++ runtime (runtime/src/host.cpp
+        `Host::generate`): one launch per M=16 prefill chunk, then one M=1 decode launch per generated
+        token (the last decode launch's argmax is recorded but not appended to `generated`, like the
+        runtime). A decode launch is skipped when the next position would not fit in `max_seq`.
+
+        Returns the golden.json record: `argmax_per_step` / `logits_last_rows` have one entry per
+        launch; a logits row is the `vocab` (not `vocab_padded`) i16 logits of the launch's relevant row
+        (row (L-1)%16 of the last prefill chunk, row 15 of earlier chunks, row 0 of a decode)."""
         prompt_tokens = [int(t) for t in prompt_tokens]
         if not prompt_tokens:
             raise ValueError("empty prompt")
@@ -365,24 +372,27 @@ class GoldenModel:
             raise ValueError(f"prompt + tokens = {len(prompt_tokens) + n_tokens} exceeds max_seq={self.max_seq}")
         self.reset()
         steps, argmax_per_step, logits_rows = [], [], []
-        rows = self.prefill(prompt_tokens, acts)
-        n_chunks = math.ceil(len(prompt_tokens) / PREFILL_M)
-        for c in range(n_chunks):
-            last = min(len(prompt_tokens), (c + 1) * PREFILL_M) - 1
-            steps.append({"kind": "prefill", "pos": c * PREFILL_M, "rows": PREFILL_M,
-                          "valid_rows": last + 1 - c * PREFILL_M})
-            argmax_per_step.append(self.argmax(rows[last], self.vocab))
-            logits_rows.append([int(v) for v in rows[last]])
-        generated = [argmax_per_step[-1]]
-        pos = len(prompt_tokens)
-        for _ in range(n_tokens - 1):
-            row = self.decode(generated[-1], pos, acts)
-            steps.append({"kind": "decode", "pos": pos, "rows": 1, "valid_rows": 1})
+
+        def record(kind: str, pos: int, valid: int, row: np.ndarray) -> int:
+            steps.append({"kind": kind, "pos": pos, "rows": PREFILL_M if kind == "prefill" else 1, "valid_rows": valid})
             argmax_per_step.append(self.argmax(row, self.vocab))
-            logits_rows.append([int(v) for v in row])
-            generated.append(argmax_per_step[-1])
-            pos += 1
-        return {"prompt_tokens": prompt_tokens, "generated": generated[:n_tokens], "argmax_per_step": argmax_per_step,
+            logits_rows.append([int(v) for v in row[: self.vocab]])
+            return argmax_per_step[-1]
+
+        rows = self.prefill(prompt_tokens, acts)
+        L = len(prompt_tokens)
+        n_chunks = math.ceil(L / PREFILL_M)
+        nxt = -1
+        for c in range(n_chunks):
+            last = min(L, (c + 1) * PREFILL_M) - 1
+            nxt = record("prefill", c * PREFILL_M, last + 1 - c * PREFILL_M, rows[last])
+        generated: list[int] = []
+        for i in range(n_tokens):
+            generated.append(nxt)
+            if L + i + 1 >= self.max_seq:
+                break  # no room for another position (runtime stops launching too)
+            nxt = record("decode", L + i, 1, self.decode(nxt, L + i, acts))
+        return {"prompt_tokens": prompt_tokens, "generated": generated, "argmax_per_step": argmax_per_step,
                 "logits_last_rows": logits_rows, "steps": steps,
                 "model": {"vocab": self.vocab, "vocab_padded": self.vocab_padded, "E_LOGIT": self.E_LOGIT,
                           "E_RES": self.E_RES, "max_seq": self.max_seq}}

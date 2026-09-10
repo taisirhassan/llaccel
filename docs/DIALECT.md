@@ -121,3 +121,71 @@ golden is the *specification-level* reference and the func-sim / RTL are the
 ```
 Programs live inside the DRAM image at `pc`. The runtime: write input rows →
 set `POS` → run program `M` → read logits rows → argmax over `vocab`.
+
+## 4. Clarifications (Python side: exporter, reference quantizer, golden)
+
+Added 2026-09-10 while finishing `python/llaccel/*`; they pin down details the
+sections above leave open. Where a rule below conflicts with a "Compiler:" line of
+NUMERICS.md, the *device* formula of NUMERICS.md / `numerics.h` is authoritative and
+the rule below is the parameter choice that makes it correct.
+
+### 4.1 Exporter (`model.mlir`)
+* Float attributes are printed with Python `repr` plus a mandatory `.` (`1.0e-05`,
+  `10000.0`); MLIR parses them identically to the §1 spelling `1.0e-5`.
+* Single-head layouts are accepted: `view(1, T, 1, D)` leaves no column dim for
+  the head axis, and GQA replication of a single KV head (`repeat_interleave` /
+  `expand`+`reshape` of a size-1 dim) is a zero-stride head dim; both denote the
+  §1 semantics with `heads = 1` / `kv_heads = 1`.
+* `calib.json` holds one entry per `llaccel.name` in `model.mlir` plus `input`
+  (the embedding output). Abs-max is measured on the exported graph itself.
+
+### 4.2 Reference quantizer (`llaccel.refquant`, twin of `llaccel-quantize`/`-fuse`)
+* Rounding: every float→int decision uses C `llround` (round half away from
+  zero), (M, S) pairs come from `frexp` normalisation with `M ∈ [2^30, 2^31)`
+  (`S` pinned at 63 for tiny ratios), exactly as
+  `compiler/include/llaccel/Support/QuantParams.h`.
+* `E_RES = max` of the i16 exponents of `input`, every `l*.x1`, `l*.x2` **and the
+  addends `l*.o`, `l*.d`**; all of them are emitted at `E_RES` (so `sh_b = 0`).
+  `E_LOGIT` is the exponent of `logits`; `lm_head` and `embed` are padded with
+  zero rows to `vocab_padded = ceil16(vocab)`.
+* RoPE preserves the exponent: `e(q) = e(qr) = max(e_calib(q), e_calib(qr))`,
+  same for `k`/`kr` (the rotation can raise the per-element abs-max by √2).
+* i8 activations: `v` projections (`s = absmax(v)/127`, written straight into the
+  KV cache), the attention output `a` (`s_out = absmax(a)/127`), and one `quant`
+  op `name → name.q` (`s = absmax(name)/127`) in front of every i16-input linear
+  (`h`, `h2`, `f`, `hn`) and in front of the KV write / attention (`qr`, `kr`).
+* RMSNorm `R`: the largest `R ≤ 31` with `C = llround(2^R·√K) < 2^32` and the
+  estimated `inv = floor(C / floor(√(K·rms_q² + eps_t)))` below `65535/4`, where
+  `rms_q = (absmax_in / 4) / 2^e_x` (abs-max ≈ 4 standard deviations).
+* SiLU: `Mi = 2^30`, `Si = 30 − (e_x + 12)`, `sh_out = 16 + e_y − e_x`.
+* **MUL / ADD shift sign.** With `y = sat16(rshr(a·b, sh))` and `a·b` at exponent
+  `e_a + e_b`, the shift is `sh = e_y − e_a − e_b` (e.g. −14 − (−13) − (−12) = 11).
+  NUMERICS.md's "Compiler:" line writes `e_a + e_b − e_y`, which is the negation
+  and is < 0 for every real exponent set. Likewise ADD needs `sh_b = e_a − e_b ≥ 0`
+  (0 for residual adds at `E_RES`). The reference quantizer and
+  `compiler/include/llaccel/Support/QuantParams.h` both implement the correct sign.
+* Fusion (`--fusion`, v2): a fused linear's `rq` targets the exponent of the
+  pre-epilogue tensor (`o`/`d` → `E_RES`, `g`, `u`), the op result carries the fused
+  name/exponent (`x1`/`x2`, `sg`, `f`), `aux_shift` is the MUL shift (or 0 for
+  RESADD), `silu` holds `{Mi, Si, sh_out}`. `qweights.bin` is byte-identical
+  between the v1 and v2 dumps; only the op list changes. The qgraph carries an
+  extra `"fusion": bool` and `exps` also lists the pre-epilogue names.
+* `kv_write` has no output tensor; a linear without bias has `"bias": null`.
+
+### 4.3 `golden.json` (golden → runtime `--verify`)
+```json
+{"prompt_tokens": [...], "generated": [...], "argmax_per_step": [...],
+ "logits_last_rows": [[...i16 × vocab...], ...], "steps": [{"kind","pos","rows","valid_rows"}, ...]}
+```
+* One entry of `argmax_per_step` / `logits_last_rows` / `steps` per device
+  launch: every M=16 prefill chunk (in order), then every M=1 decode launch.
+  Mirrors `runtime/src/host.cpp Host::generate`: `n_tokens` decode launches, the
+  first `generated` token is the last prefill chunk's argmax, the last decode
+  launch's argmax is recorded in `argmax_per_step` but not appended to
+  `generated`; a decode launch is skipped when `L + i + 1 ≥ max_seq`.
+* A logits row holds the first `vocab` (not `vocab_padded`) i16 logits at
+  `E_LOGIT` of the launch's relevant row: row `(L−1) mod 16` of the last prefill
+  chunk, row 15 of earlier chunks, row 0 of a decode launch.
+* Argmax is over those `vocab` entries, lowest index on ties.
+* `--dump-acts DIR` writes `step{i:03d}_{prefill|decode}_pos{P}_{name}.npy`
+  (int32, `[M][cols]`) for every named activation of every launch.

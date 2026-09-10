@@ -101,8 +101,8 @@ Compiler: `Mi · 2^-Si ≈ 2^(e_x + 12)`; `sh_out = 16 + e_y − e_x`.
 ## Elementwise (engine: vec)
 
 ```
-MUL   : y = sat16( rshr( a · b , sh ) )                 a, b, y: i16 ;  compiler: sh = e_a + e_b − e_y (sh ∈ [0,63])
-ADD   : y = sat16( a + rshr( b , sh_b ) )               sh_b = e_b − e_a ≥ 0 ; e_y = e_a
+MUL   : y = sat16( rshr( a · b , sh ) )                 a, b, y: i16 ;  compiler: sh = e_y − e_a − e_b (sh ∈ [0,63])
+ADD   : y = sat16( a + rshr( b , sh_b ) )               sh_b = e_a − e_b ≥ 0 ; e_y = e_a
 QUANT : y = sat8( mulshift( x , M , S ) )               i16 → i8 ; M·2^-S ≈ 2^e_x / s_y
 ```
 Counts are multiples of 16 elements.

@@ -18,6 +18,8 @@ llaccel-export = "llaccel.export:main"
 llaccel-train = "llaccel.train:main"
 llaccel-golden = "llaccel.golden:main"
 llaccel-verify = "llaccel.verify:main"
+llaccel-calibrate = "llaccel.calibrate:main"
+llaccel-refquant = "llaccel.refquant:main"
 
 [build-system]
 requires = ["hatchling"]

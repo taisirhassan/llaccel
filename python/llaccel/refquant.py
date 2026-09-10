@@ -1,14 +1,43 @@
-"""Reference quantizer: export dir -> qgraph.json + qweights.bin (DIALECT.md section 2).
+"""Reference quantizer: export dir -> qgraph.json + qweights.bin (docs/DIALECT.md section 2).
 
-    uv run python -m llaccel.refquant build/export/ -o build/q/ [--fuse]
+    uv run python -m llaccel.refquant build/export -o build/q-ref/ [--fusion]
 
-This is *test infrastructure*, not the compiler: it mirrors the integer-parameter
-decisions the `llaccel-quantize` pass has to make (the "Compiler:" lines of
-docs/NUMERICS.md) so that the golden model, verify tool and the end-to-end tests
-can run before / independently of the C++ compiler. The C++ compiler's qgraph
-is the one the runtime is checked against; this one exists so that the Python
-side is self-checking and so the quantization recipe is written down once in
-executable form. `--fuse` emits the v2 (epilogue-fused) op forms.
+What this is
+------------
+A Python re-implementation of the *decisions* of the C++ `llaccel-quantize` (+
+`llaccel-fuse`) passes, producing the same `qgraph.json` / `qweights.bin` dump the
+compiler writes with `--dump-qgraph`. It is not the compiler: it exists so that
+
+* the numpy golden model, `llaccel.verify` and the end-to-end tests can run before /
+  independently of the C++ compiler, and
+* the C++ compiler can be diffed against it (same tensor names, same op list, same
+  integer parameters) — the quantization recipe is written down once in executable form.
+
+Every parameter formula is the "Compiler:" line of docs/NUMERICS.md, implemented in
+section "QuantParams.h twins" below as a line-by-line twin of the C++ header
+`compiler/include/llaccel/Support/QuantParams.h` (same rounding: C `llround`, i.e.
+round-half-away-from-zero; same evaluation order of the double arithmetic; same
+`frexp`-based (M, S) normalisation; same R-selection rule for RMSNorm).
+
+Policies (docs/DIALECT.md section 2 and its clarifications, docs/PLAN.md):
+
+* i16 activations: `e = max(ceil(log2(absmax / 32767)), -15)` from calib.json.
+* Residual stream: one global `E_RES` = max exponent over `input`, every `l*.x1`, `l*.x2`
+  and the addends `l*.o`, `l*.d` (which are emitted at `E_RES` so residual adds need no
+  shift). `E_LOGIT` = exponent of `logits`.
+* RoPE preserves the exponent: `e(q) = e(qr) = max(e_calib(q), e_calib(qr))`, same for k/kr.
+* `v` projections are emitted i8 (`s = absmax / 127`) straight into the KV cache;
+  attention output `a` is i8 (`s_out = absmax(a) / 127`).
+* A `quant` op (`name` -> `name.q`, `s = absmax(name) / 127`) is inserted in front of every
+  linear whose input is i16 (`h`, `h2`, `f`, `hn`) and in front of the KV write / attention
+  (`qr`, `kr`).
+* Weights: int8 per-output-channel, `s[n] = max|W[n,:]| / 127` (all-zero rows -> 1).
+  `lm_head` and `embed` are padded to `vocab_padded` (multiple of 16) rows.
+* Bias: i32 `llround(b / (s_a * s_w[n]))`.
+* `--fusion` (v2): `linear+add` -> epilogue `resadd`, `linear+silu` -> `silu`,
+  `linear+mul` -> `mul`; the linear's requant targets the exponent of the pre-epilogue
+  tensor (`o`/`d` -> E_RES, `g`, `u`), the op result carries the fused tensor's name and
+  exponent (`x1`/`x2`, `sg`, `f`). The arithmetic is identical to the unfused ops.
 """
 from __future__ import annotations
 
@@ -20,62 +49,196 @@ from pathlib import Path
 
 import numpy as np
 
-from .golden import GoldenModel, isqrt48
+from .golden import GoldenModel
+
+INT32_MAX, INT32_MIN = 2**31 - 1, -(2**31)
 
 
 # --------------------------------------------------------------------------------------
-# fixed-point helpers (the compiler's side of NUMERICS.md)
+# C rounding
 # --------------------------------------------------------------------------------------
-def exp_for(absmax: float) -> int:
-    """i16 exponent: e = ceil(log2(absmax / 32767))."""
-    if absmax <= 0:
-        return -15
-    return int(math.ceil(math.log2(absmax / 32767.0)))
+def llround(x: float) -> int:
+    """C `llround`: nearest integer, halves away from zero (Python's round() is half-even)."""
+    x = float(x)
+    if math.isnan(x) or math.isinf(x):
+        raise ValueError(f"llround of {x}")
+    t = math.trunc(x)
+    frac = x - t  # exact for |x| < 2^52
+    if frac >= 0.5:
+        return t + 1
+    if frac <= -0.5:
+        return t - 1
+    return t
 
 
-def mulshift_params(ratio: float, s_max: int = 63) -> tuple[int, int]:
-    """(M, S) with M * 2^-S ~= ratio, M normalized to [2^30, 2^31) when possible."""
-    if ratio <= 0:
-        return 0, 0
-    e = math.floor(math.log2(ratio))
-    S = 30 - e
-    if S > s_max:
-        S = s_max
-    if S < 0:
-        S = 0
-    M = int(round(ratio * 2.0**S))
-    if M >= 2**31:
-        M //= 2
+def llround_arr(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    t = np.trunc(x)
+    frac = x - t
+    return np.where(frac >= 0.5, t + 1, np.where(frac <= -0.5, t - 1, t)).astype(np.int64)
+
+
+# --------------------------------------------------------------------------------------
+# QuantParams.h twins (one function per C++ function, same name in snake_case)
+# --------------------------------------------------------------------------------------
+def normalize_mulshift(r: float) -> tuple[int, int]:
+    """(M, S) with M * 2^-S ~= r and M in [2^30, 2^31) (QuantParams.h normalizeMulShift)."""
+    if not (r > 0.0) or not math.isfinite(r):
+        raise ValueError("normalize_mulshift: ratio must be positive and finite")
+    f, e = math.frexp(r)  # r = f * 2^e, f in [0.5, 1)
+    M = llround(math.ldexp(f, 31))
+    S = 31 - e
+    if M >= 1 << 31:  # f rounded up to 1.0
+        M = 1 << 30
         S -= 1
-        if S < 0:
-            raise ValueError(f"ratio {ratio} too large for mulshift")
+    if S < 0:
+        raise ValueError(f"normalize_mulshift: ratio {r} too large (S < 0)")
+    if S > 63:  # tiny ratio: keep S = 63 and accept a smaller M (may be 0)
+        M = llround(math.ldexp(r, 63))
+        S = 63
     return M, S
 
 
-def to_i16(x: np.ndarray, e: int) -> np.ndarray:
-    return np.clip(np.round(x / 2.0**e), -32768, 32767).astype(np.int16)
+def i16_exponent(absmax: float) -> int:
+    """e = max(ceil(log2(absmax / 32767)), -15)."""
+    if not (absmax > 0.0):
+        return -15
+    return max(int(math.ceil(math.log2(absmax / 32767.0))), -15)
 
 
-def to_i8_per_channel(w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    s = np.abs(w).max(axis=1) / 127.0
-    s_safe = np.where(s > 0, s, 1.0)
-    q = np.clip(np.round(w / s_safe[:, None]), -128, 127).astype(np.int8)
-    return q, s
+def i8_scale(absmax: float) -> float:
+    """absmax / 127 (absmax 0 -> 1: the tensor is all zero)."""
+    return absmax / 127.0 if absmax > 0.0 else 1.0
+
+
+def quant_i8(v: np.ndarray, scale) -> np.ndarray:
+    return np.clip(llround_arr(np.asarray(v, dtype=np.float64) / scale), -128, 127).astype(np.int8)
+
+
+def quant_i16(v: np.ndarray, e: int) -> np.ndarray:
+    return np.clip(llround_arr(np.ldexp(np.asarray(v, dtype=np.float64), -int(e))), -32768, 32767).astype(np.int16)
+
+
+def weight_row_scales(w: np.ndarray) -> np.ndarray:
+    """Per-output-channel scale max|W[n,:]| / 127, zero rows -> 1 (QuantParams.h weightRowScale)."""
+    mx = np.abs(np.asarray(w, dtype=np.float64)).max(axis=1)
+    return np.where(mx > 0.0, mx / 127.0, 1.0)
+
+
+def gemm_rq(s_a: float, s_w: float, out_i8: bool, e_out: int, s_out: float) -> tuple[int, int]:
+    """i16 out: M*2^-S ~= s_a*s_w / 2^e_out ; i8 out: s_a*s_w / s_out."""
+    r = s_a * s_w / s_out if out_i8 else s_a * s_w / math.ldexp(1.0, int(e_out))
+    return normalize_mulshift(r)
+
+
+def gemm_bias(b: float, s_a: float, s_w: float) -> int:
+    v = llround(b / (s_a * s_w))
+    return max(INT32_MIN, min(INT32_MAX, v))
+
+
+def quant_params(e_x: int, s_y: float) -> tuple[int, int]:
+    """QUANT i16 -> i8: M*2^-S ~= 2^e_x / s_y."""
+    return normalize_mulshift(math.ldexp(1.0, int(e_x)) / s_y)
+
+
+def rmsnorm_params(K: int, eps: float, e_x: int, e_g: int, e_y: int, absmax_x: float, name: str) -> dict:
+    """eps_t = llround(eps K 2^(-2 e_x)); R = largest <= 31 with C = llround(2^R sqrt(K)) < 2^32 and the
+    estimated inv (rms ~= absmax/4) below 65535/4; sh_post = R - e_g + e_y."""
+    eps_t = llround(eps * float(K) * math.ldexp(1.0, int(-2 * e_x)))
+    if eps_t >= 2**48:
+        raise ValueError(f"rmsnorm {name}: eps_t does not fit in 48 bits")
+    rms_q = (absmax_x / 4.0) / math.ldexp(1.0, int(e_x))
+    r_typ = math.floor(math.sqrt(float(K) * rms_q * rms_q + float(eps_t)))
+    if r_typ < 1.0:
+        r_typ = 1.0
+    R, C = -1, 0
+    for cand in range(31, -1, -1):
+        Cc = llround(math.ldexp(math.sqrt(float(K)), cand))
+        if Cc >= 4294967296:
+            continue
+        inv_typ = math.floor(Cc / r_typ)
+        if inv_typ < 65535.0 / 4.0:
+            R, C = cand, Cc
+            break
+    if R < 0:
+        raise ValueError(f"rmsnorm {name}: no R in [0,31] keeps inv below 65535/4 (input abs-max {absmax_x} too small for e_x)")
+    sh_post = R - e_g + e_y
+    if not 0 <= sh_post <= 63:
+        raise ValueError(f"rmsnorm {name}: sh_post = {sh_post} outside [0, 63]")
+    return {"eps_t": eps_t, "C": C, "R": R, "sh_post": sh_post}
+
+
+def silu_params(e_x: int, e_y: int, name: str) -> dict:
+    """Mi = 2^30, Si = 30 - (e_x + 12) (Mi*2^-Si = 2^(e_x+12)); sh_out = 16 + e_y - e_x."""
+    Mi, Si, sh_out = 1 << 30, 30 - (e_x + 12), 16 + e_y - e_x
+    if not 0 <= Si <= 63:
+        raise ValueError(f"silu {name}: Si = {Si} outside [0, 63]")
+    if not 0 <= sh_out <= 63:
+        raise ValueError(f"silu {name}: sh_out = {sh_out} outside [0, 63]")
+    return {"Mi": Mi, "Si": Si, "sh_out": sh_out}
+
+
+def mul_shift(e_a: int, e_b: int, e_y: int, name: str) -> int:
+    """MUL: y = sat16(rshr(a*b, sh)); a*b has exponent e_a + e_b, so sh = (e_a + e_b) - e_y ... expressed as a
+    *right* shift: sh = e_y - e_a - e_b.
+
+    NOTE: NUMERICS.md's "Compiler:" line (and QuantParams.h `mulShift`) write `e_a + e_b - e_y`, which is the
+    negative of the shift the device formula needs (it is < 0 for every real exponent set, e.g. -13-12+14).
+    The device formula (numerics.h `vmul`) is authoritative; see the DIALECT.md clarifications."""
+    sh = e_y - e_a - e_b
+    if not 0 <= sh <= 63:
+        raise ValueError(f"mul {name}: sh = {sh} outside [0, 63]")
+    return sh
+
+
+def add_shift(e_a: int, e_b: int, name: str) -> int:
+    """ADD: y = sat16(a + rshr(b, sh_b)), e_y = e_a, so b must be brought from e_b to e_a: sh_b = e_a - e_b >= 0.
+    (NUMERICS.md writes e_b - e_a; both are 0 for residual adds at E_RES.)"""
+    sh = e_a - e_b
+    if not 0 <= sh <= 63:
+        raise ValueError(f"add {name}: sh_b = {sh} outside [0, 63] (b must not have a larger exponent than a)")
+    return sh
+
+
+def attn_params(s_q: float, s_k: float, s_v: float, s_out: float, D: int) -> dict:
+    Ms, Ss = normalize_mulshift(256.0 * s_q * s_k / math.sqrt(float(D)))
+    Mo, So = normalize_mulshift(s_v / (256.0 * s_out))
+    return {"Ms": Ms, "Ss": Ss, "Mo": Mo, "So": So}
+
+
+def rope_tables(max_seq: int, D: int, base: float) -> tuple[np.ndarray, np.ndarray]:
+    """cos/sin[p][i] = llround(2^14 cos/sin(p * theta_i)), theta_i = base^(-2i/D); [max_seq][D/2] i16."""
+    half = D // 2
+    cos_t = np.zeros((max_seq, half), dtype=np.int16)
+    sin_t = np.zeros((max_seq, half), dtype=np.int16)
+    for i in range(half):
+        theta = math.pow(base, -2.0 * float(i) / float(D))
+        for p in range(max_seq):
+            ang = float(p) * theta
+            cos_t[p, i] = min(llround(16384.0 * math.cos(ang)), 32767)
+            sin_t[p, i] = min(llround(16384.0 * math.sin(ang)), 32767)
+    return cos_t, sin_t
 
 
 # --------------------------------------------------------------------------------------
+# qweights.bin writer
+# --------------------------------------------------------------------------------------
 class Blob:
+    """Concatenates tensors (each padded to 64 B) and records the DIALECT.md `tensors` entries."""
+
     def __init__(self) -> None:
         self.parts: list[bytes] = []
         self.off = 0
         self.tensors: dict[str, dict] = {}
 
     def add(self, name: str, arr: np.ndarray, dtype: str, exp: int | None = None) -> None:
+        if name in self.tensors:
+            raise ValueError(f"duplicate tensor {name}")
         raw = {"i8": arr.astype("<i1"), "i16": arr.astype("<i2"), "i32": arr.astype("<i4"), "rq": arr.astype("<i4")}[dtype]
         b = raw.tobytes()
         spec = {"dtype": dtype, "shape": [int(s) for s in (arr.shape[:-1] if dtype == "rq" else arr.shape)], "offset": self.off}
         if exp is not None:
-            spec["exp"] = exp
+            spec["exp"] = int(exp)
         self.tensors[name] = spec
         self.parts.append(b)
         self.off += len(b)
@@ -84,7 +247,13 @@ class Blob:
             self.parts.append(b"\0" * pad)
             self.off += pad
 
+    def bytes(self) -> bytes:
+        return b"".join(self.parts)
 
+
+# --------------------------------------------------------------------------------------
+# export dir reader
+# --------------------------------------------------------------------------------------
 def parse_model_attrs(mlir: str) -> dict:
     m = re.search(r"llaccel\.model\s*=\s*\{(.*?)\}\}", mlir, re.S)
     if not m:
@@ -96,6 +265,8 @@ def parse_model_attrs(mlir: str) -> dict:
 
 
 def load_export(export_dir: Path) -> tuple[dict, dict[str, np.ndarray], dict[str, float]]:
+    """(model attrs, {weight name: f64 array (exact f32 values)}, {llaccel.name: absmax})."""
+    export_dir = Path(export_dir)
     cfg = parse_model_attrs((export_dir / "model.mlir").read_text())
     blob = (export_dir / "weights.bin").read_bytes()
     with open(export_dir / "weights.json") as f:
@@ -110,177 +281,174 @@ def load_export(export_dir: Path) -> tuple[dict, dict[str, np.ndarray], dict[str
 
 
 # --------------------------------------------------------------------------------------
-def quantize_export(export_dir: Path, out_dir: Path, fuse: bool = False, rms_ratio: float = 64.0) -> dict:
-    cfg, W, calib = load_export(export_dir)
-    dim, L, H, Hkv, D, ffn, vocab, max_seq = (cfg[k] for k in ("dim", "n_layers", "n_heads", "n_kv_heads", "head_dim",
-                                                               "ffn", "vocab", "max_seq"))
-    eps, base = cfg["rms_eps"], cfg["rope_base"]
-    vocab_padded = (vocab + 15) // 16 * 16
-    if dim % 16 or ffn % 16 or (Hkv * D) % 16:
-        raise ValueError("dim/ffn/kv width must be multiples of 16")
+# the quantizer
+# --------------------------------------------------------------------------------------
+class RefQuantizer:
+    def __init__(self, cfg: dict, weights: dict[str, np.ndarray], calib: dict[str, float], fusion: bool) -> None:
+        self.cfg, self.W, self.calib, self.fusion = cfg, weights, calib, fusion
+        self.blob = Blob()
+        self.ops: list[dict] = []
+        self.exps: dict[str, int] = {}
+        self.scales: dict[str, float] = {}
 
-    exps: dict[str, int] = {}
-    scales: dict[str, float] = {}
-    res_names = ["input"] + [f"l{i}.{n}" for i in range(L) for n in ("x1", "x2", "o", "d")]
-    E_RES = max(exp_for(calib[n]) for n in res_names)
-    E_LOGIT = exp_for(calib["logits"])
-    for n in res_names:
-        exps[n] = E_RES
-    exps["logits"] = E_LOGIT
+    # ---- activation formats ------------------------------------------------------------
+    def absmax(self, name: str) -> float:
+        if name not in self.calib:
+            raise KeyError(f"calib.json has no entry for activation {name!r}")
+        return float(self.calib[name])
 
-    blob = Blob()
-    ops: list[dict] = []
+    def e16(self, name: str) -> int:
+        if name not in self.exps:
+            self.exps[name] = i16_exponent(self.absmax(name))
+        return self.exps[name]
 
-    # embedding, padded to vocab_padded rows
-    emb = np.zeros((vocab_padded, dim))
-    emb[:vocab] = W["embed"]
-    blob.add("embed", to_i16(emb, E_RES), "i16", E_RES)
-    # rope tables Q1.14
-    inv_freq = base ** (-np.arange(0, D, 2, dtype=np.float64) / D)
-    ang = np.outer(np.arange(max_seq, dtype=np.float64), inv_freq)
-    blob.add("rope_cos", np.clip(np.round(np.cos(ang) * 16384), -32768, 32767).astype(np.int16), "i16")
-    blob.add("rope_sin", np.clip(np.round(np.sin(ang) * 16384), -32768, 32767).astype(np.int16), "i16")
+    def s8(self, name: str, src: str | None = None) -> float:
+        """Scale of i8 activation `name`, calibrated from `src` (default: `name` minus a `.q` suffix)."""
+        if name not in self.scales:
+            self.scales[name] = i8_scale(self.absmax(src or name.removesuffix(".q")))
+        return self.scales[name]
 
-    def i16_act(name: str) -> int:
-        if name not in exps:
-            exps[name] = exp_for(calib[name])
-        return exps[name]
+    # ---- op emitters -----------------------------------------------------------------------
+    def rmsnorm(self, x: str, gamma: str, y: str) -> None:
+        e_x, e_y = self.e16(x), self.e16(y)
+        g = self.W[gamma]
+        e_g = i16_exponent(float(np.abs(g).max()))
+        self.blob.add(gamma, quant_i16(g, e_g), "i16", e_g)
+        K = int(g.shape[0])
+        p = rmsnorm_params(K, self.cfg["rms_eps"], e_x, e_g, e_y, self.absmax(x), y)
+        self.ops.append({"op": "rmsnorm", "in": x, "gamma": gamma, "out": y, "K": K, "eps_t": p["eps_t"], "C": p["C"],
+                         "sh_post": p["sh_post"]})
 
-    def i8_act(name: str, src: str | None = None) -> float:
-        """scale of an i8 activation `name`, calibrated from tensor `src` (default: name without .q)."""
-        if name not in scales:
-            scales[name] = calib[src or name.removesuffix(".q")] / 127.0
-        return scales[name]
-
-    def rmsnorm_op(x: str, gamma: str, y: str) -> None:
-        e_x, e_y = i16_act(x), i16_act(y)
-        g = W[gamma]
-        e_g = exp_for(np.abs(g).max())
-        blob.add(gamma, to_i16(g, e_g), "i16", e_g)
-        K = g.shape[0]
-        eps_t = int(round(eps * K * 2.0 ** (-2 * e_x)))
-        absmax_int = calib[x] / 2.0**e_x
-        R_max = int(math.floor(math.log2((2**32 - 1) / math.sqrt(K))))
-        R = min(R_max, int(math.floor(math.log2(65535.0 * absmax_int / rms_ratio))))
-        R = max(R, e_g - e_y)  # sh_post >= 0
-        C = int(round(2.0**R * math.sqrt(K)))
-        sh_post = R - e_g + e_y
-        if not 0 <= sh_post <= 63 or C >= 2**32:
-            raise ValueError(f"rmsnorm {y}: sh_post={sh_post} C={C} out of range")
-        ops.append({"op": "rmsnorm", "in": x, "gamma": gamma, "out": y, "K": K, "eps_t": eps_t, "C": C, "sh_post": sh_post})
-
-    def quant_op(x: str) -> str:
+    def quant(self, x: str) -> str:
         y = x + ".q"
-        e_x, s_y = i16_act(x), i8_act(y, x)
-        M, S = mulshift_params(2.0**e_x / s_y)
-        ops.append({"op": "quant", "in": x, "out": y, "M": M, "S": S})
+        M, S = quant_params(self.e16(x), self.s8(y, x))
+        self.ops.append({"op": "quant", "in": x, "out": y, "M": M, "S": S})
         return y
 
-    def linear_op(a: str, w: str, b: str | None, y: str, out_dtype: str, N_pad: int | None = None,
-                  epilogue: str = "none", aux: str | None = None, aux_shift: int = 0, silu: dict | None = None,
-                  e_out: int | None = None) -> None:
-        w_f = W[w]
+    def linear(self, a: str, w: str, b: str | None, y: str, out_dtype: str, *, e_rq: int | None = None, N_pad: int | None = None,
+               epilogue: str = "none", aux: str | None = None, aux_shift: int = 0, silu: dict | None = None) -> None:
+        """`e_rq`: exponent the requant targets (i16 out; defaults to e(y)); the op's `out` is `y`."""
+        w_f = self.W[w]
         if N_pad is not None and N_pad != w_f.shape[0]:
             w_f = np.concatenate([w_f, np.zeros((N_pad - w_f.shape[0], w_f.shape[1]))], axis=0)
-        N, K = w_f.shape
-        q, s_w = to_i8_per_channel(w_f)
-        blob.add(w, q, "i8")
-        s_a = i8_act(a)
+        N, K = (int(s) for s in w_f.shape)
+        s_w = weight_row_scales(w_f)
+        self.blob.add(w, quant_i8(w_f, s_w[:, None]), "i8")
+        s_a = self.s8(a)
         if out_dtype == "i16":
-            if e_out is not None:
-                exps[y] = e_out
-            e_y = i16_act(y)
-            denom = 2.0**e_y
+            e_out = self.e16(y) if e_rq is None else e_rq
+            rq = [gemm_rq(s_a, float(s_w[n]), False, e_out, 0.0) for n in range(N)]
+        elif out_dtype == "i8":
+            if epilogue != "none":
+                raise ValueError(f"linear {y}: i8 output is only valid with epilogue none")
+            rq = [gemm_rq(s_a, float(s_w[n]), True, 0, self.s8(y)) for n in range(N)]
         else:
-            denom = i8_act(y)
-        rq = np.array([mulshift_params(s_a * s_w[n] / denom) for n in range(N)], dtype=np.int64)
-        blob.add(w + ".rq", rq, "rq")
+            raise ValueError(out_dtype)
+        self.blob.add(w + ".rq", np.array(rq, dtype=np.int64), "rq")
         bias = None
-        if b is not None and b in W:
+        if b is not None and b in self.W:
             bq = np.zeros(N)
-            bq[: W[b].shape[0]] = W[b]
-            s_safe = np.where(s_w > 0, s_w, 1.0)
-            blob.add(b, np.round(bq / (s_a * s_safe)).astype(np.int32), "i32")
+            bq[: self.W[b].shape[0]] = self.W[b]
+            self.blob.add(b, np.array([gemm_bias(float(bq[n]), s_a, float(s_w[n])) for n in range(N)], dtype=np.int32), "i32")
             bias = b
-        ops.append({"op": "linear", "in": a, "w": w, "rq": w + ".rq", "bias": bias, "out": y, "N": N, "K": K,
-                    "out_dtype": out_dtype, "epilogue": epilogue, "aux": aux, "aux_shift": aux_shift, "silu": silu})
+        self.ops.append({"op": "linear", "in": a, "w": w, "rq": w + ".rq", "bias": bias, "out": y, "N": N, "K": K,
+                         "out_dtype": out_dtype, "epilogue": epilogue, "aux": aux, "aux_shift": aux_shift, "silu": silu})
 
-    def silu_params(x: str, y: str) -> dict:
-        e_x, e_y = i16_act(x), i16_act(y)
-        Mi, Si = mulshift_params(2.0 ** (e_x + 12))
-        sh_out = 16 + e_y - e_x
-        if not 0 <= sh_out <= 63:
-            raise ValueError(f"silu {y}: sh_out={sh_out}")
-        return {"Mi": Mi, "Si": Si, "sh_out": sh_out}
+    # ---- the graph -----------------------------------------------------------------------------
+    def run(self) -> dict:
+        c = self.cfg
+        dim, L, H, Hkv, D, ffn, vocab, max_seq = (int(c[k]) for k in ("dim", "n_layers", "n_heads", "n_kv_heads", "head_dim",
+                                                                    "ffn", "vocab", "max_seq"))
+        vocab_padded = (vocab + 15) // 16 * 16
+        for what, val in (("dim", dim), ("ffn", ffn), ("n_kv_heads*head_dim", Hkv * D)):
+            if val % 16:
+                raise ValueError(f"{what} = {val} must be a multiple of 16")
+        if D not in (16, 32, 64):
+            raise ValueError(f"head_dim {D} not in (16, 32, 64) (ISA.md ATTN)")
 
-    residual = "input"
-    for i in range(L):
-        p = f"l{i}"
-        rmsnorm_op(residual, f"{p}_attn_norm", f"{p}.h")
-        hq = quant_op(f"{p}.h")
-        linear_op(hq, f"{p}_wq", f"{p}_bq", f"{p}.q", "i16")
-        linear_op(hq, f"{p}_wk", f"{p}_bk", f"{p}.k", "i16")
-        linear_op(hq, f"{p}_wv", f"{p}_bv", f"{p}.v", "i8")
-        exps[f"{p}.qr"] = exps[f"{p}.q"]  # rope preserves the exponent
-        exps[f"{p}.kr"] = exps[f"{p}.k"]
-        ops.append({"op": "rope", "in": f"{p}.q", "out": f"{p}.qr", "H": H, "D": D})
-        ops.append({"op": "rope", "in": f"{p}.k", "out": f"{p}.kr", "H": Hkv, "D": D})
-        qq, kq = quant_op(f"{p}.qr"), quant_op(f"{p}.kr")
-        ops.append({"op": "kv_write", "layer": i, "k": kq, "v": f"{p}.v", "Hkv": Hkv, "D": D})
-        s_q, s_k, s_v, s_o = scales[qq], scales[kq], scales[f"{p}.v"], i8_act(f"{p}.a")
-        Ms, Ss = mulshift_params(256.0 * s_q * s_k / math.sqrt(D))
-        Mo, So = mulshift_params(s_v / (256.0 * s_o))
-        ops.append({"op": "attention", "q": qq, "layer": i, "out": f"{p}.a", "H": H, "Hkv": Hkv, "D": D,
-                    "Ms": Ms, "Ss": Ss, "Mo": Mo, "So": So})
-        if fuse:
-            linear_op(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.x1", "i16", epilogue="resadd", aux=residual, e_out=E_RES)
-        else:
-            linear_op(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.o", "i16", e_out=E_RES)
-            ops.append({"op": "add", "a": residual, "b": f"{p}.o", "out": f"{p}.x1", "sh_b": 0})
-        rmsnorm_op(f"{p}.x1", f"{p}_ffn_norm", f"{p}.h2")
-        h2q = quant_op(f"{p}.h2")
-        e_g, e_u, e_sg, e_f = (i16_act(f"{p}.{n}") for n in ("g", "u", "sg", "f"))
-        # vmul is a *right* shift of a*b (exponent e_sg + e_u) to exponent e_f: sh = e_f - e_sg - e_u.
-        # (NUMERICS.md's "Compiler:" line writes this with the opposite sign; numerics.h is authoritative.)
-        sh_mul = e_f - e_sg - e_u
-        if not 0 <= sh_mul <= 63:
-            raise ValueError(f"mul {p}.f: sh={sh_mul}")
-        if fuse:
-            # fused form: the linear's rq targets the pre-epilogue exponent e(g) / e(u) while the op's
-            # `out` tensor lives at e(sg) / e(f); `e_out` sets the former, the exps map keeps the latter.
-            linear_op(h2q, f"{p}_wg", f"{p}_bg", f"{p}.sg", "i16", epilogue="silu", silu=silu_params(f"{p}.g", f"{p}.sg"),
-                      e_out=e_g)
-            exps[f"{p}.sg"] = e_sg
-            linear_op(h2q, f"{p}_wu", f"{p}_bu", f"{p}.f", "i16", epilogue="mul", aux=f"{p}.sg", aux_shift=sh_mul, e_out=e_u)
-            exps[f"{p}.f"] = e_f
-        else:
-            linear_op(h2q, f"{p}_wg", f"{p}_bg", f"{p}.g", "i16")
-            linear_op(h2q, f"{p}_wu", f"{p}_bu", f"{p}.u", "i16")
-            ops.append({"op": "silu", "in": f"{p}.g", "out": f"{p}.sg", **silu_params(f"{p}.g", f"{p}.sg")})
-            ops.append({"op": "mul", "a": f"{p}.sg", "b": f"{p}.u", "out": f"{p}.f", "sh": sh_mul})
-        fq = quant_op(f"{p}.f")
-        if fuse:
-            linear_op(fq, f"{p}_wd", f"{p}_bd", f"{p}.x2", "i16", epilogue="resadd", aux=f"{p}.x1", e_out=E_RES)
-        else:
-            linear_op(fq, f"{p}_wd", f"{p}_bd", f"{p}.d", "i16", e_out=E_RES)
-            ops.append({"op": "add", "a": f"{p}.x1", "b": f"{p}.d", "out": f"{p}.x2", "sh_b": 0})
-        residual = f"{p}.x2"
-    rmsnorm_op(residual, "norm", "hn")
-    hnq = quant_op("hn")
-    linear_op(hnq, "lm_head", "lm_head_bias", "logits", "i16", N_pad=vocab_padded, e_out=E_LOGIT)
+        # global exponents
+        res_names = ["input"] + [f"l{i}.{n}" for i in range(L) for n in ("x1", "x2", "o", "d")]
+        E_RES = max(i16_exponent(self.absmax(n)) for n in res_names)
+        for n in res_names:
+            self.exps[n] = E_RES
+        E_LOGIT = i16_exponent(self.absmax("logits"))
+        self.exps["logits"] = E_LOGIT
 
-    qgraph = {
-        "model": {"dim": dim, "n_layers": L, "n_heads": H, "n_kv_heads": Hkv, "head_dim": D, "ffn": ffn, "vocab": vocab,
-                  "vocab_padded": vocab_padded, "max_seq": max_seq, "E_RES": E_RES, "E_LOGIT": E_LOGIT},
-        "weights_file": "qweights.bin",
-        "tensors": blob.tensors,
-        "ops": ops,
-        "input": "input", "output": "logits",
-        "exps": exps, "scales": scales,
-        "fusion": fuse,
-    }
+        # constants: embedding (padded rows), RoPE tables
+        emb = np.zeros((vocab_padded, dim))
+        emb[:vocab] = self.W["embed"]
+        self.blob.add("embed", quant_i16(emb, E_RES), "i16", E_RES)
+        cos_t, sin_t = rope_tables(max_seq, D, float(c["rope_base"]))
+        self.blob.add("rope_cos", cos_t, "i16")
+        self.blob.add("rope_sin", sin_t, "i16")
+
+        residual = "input"
+        for i in range(L):
+            p = f"l{i}"
+            self.rmsnorm(residual, f"{p}_attn_norm", f"{p}.h")
+            hq = self.quant(f"{p}.h")
+            for a, b in ((f"{p}.q", f"{p}.qr"), (f"{p}.k", f"{p}.kr")):  # RoPE preserves the exponent
+                self.exps[a] = self.exps[b] = max(i16_exponent(self.absmax(a)), i16_exponent(self.absmax(b)))
+            self.linear(hq, f"{p}_wq", f"{p}_bq", f"{p}.q", "i16")
+            self.linear(hq, f"{p}_wk", f"{p}_bk", f"{p}.k", "i16")
+            self.linear(hq, f"{p}_wv", f"{p}_bv", f"{p}.v", "i8")
+            self.ops.append({"op": "rope", "in": f"{p}.q", "out": f"{p}.qr", "H": H, "D": D})
+            self.ops.append({"op": "rope", "in": f"{p}.k", "out": f"{p}.kr", "H": Hkv, "D": D})
+            qq, kq = self.quant(f"{p}.qr"), self.quant(f"{p}.kr")
+            self.ops.append({"op": "kv_write", "layer": i, "k": kq, "v": f"{p}.v", "Hkv": Hkv, "D": D})
+            self.ops.append({"op": "attention", "q": qq, "layer": i, "out": f"{p}.a", "H": H, "Hkv": Hkv, "D": D,
+                             **attn_params(self.s8(qq), self.s8(kq), self.s8(f"{p}.v"), self.s8(f"{p}.a"), D)})
+            if self.fusion:
+                self.linear(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.x1", "i16", e_rq=E_RES, epilogue="resadd", aux=residual,
+                            aux_shift=add_shift(E_RES, E_RES, f"{p}.x1"))
+            else:
+                self.linear(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.o", "i16")
+                self.ops.append({"op": "add", "a": residual, "b": f"{p}.o", "out": f"{p}.x1", "sh_b": add_shift(E_RES, E_RES, f"{p}.x1")})
+            self.rmsnorm(f"{p}.x1", f"{p}_ffn_norm", f"{p}.h2")
+            h2q = self.quant(f"{p}.h2")
+            e_g, e_u, e_sg, e_f = (self.e16(f"{p}.{n}") for n in ("g", "u", "sg", "f"))
+            silu = silu_params(e_g, e_sg, f"{p}.sg")
+            sh_mul = mul_shift(e_sg, e_u, e_f, f"{p}.f")
+            if self.fusion:
+                self.linear(h2q, f"{p}_wg", f"{p}_bg", f"{p}.sg", "i16", e_rq=e_g, epilogue="silu", silu=silu)
+                self.linear(h2q, f"{p}_wu", f"{p}_bu", f"{p}.f", "i16", e_rq=e_u, epilogue="mul", aux=f"{p}.sg", aux_shift=sh_mul)
+            else:
+                self.linear(h2q, f"{p}_wg", f"{p}_bg", f"{p}.g", "i16")
+                self.linear(h2q, f"{p}_wu", f"{p}_bu", f"{p}.u", "i16")
+                self.ops.append({"op": "silu", "in": f"{p}.g", "out": f"{p}.sg", **silu})
+                self.ops.append({"op": "mul", "a": f"{p}.sg", "b": f"{p}.u", "out": f"{p}.f", "sh": sh_mul})
+            fq = self.quant(f"{p}.f")
+            if self.fusion:
+                self.linear(fq, f"{p}_wd", f"{p}_bd", f"{p}.x2", "i16", e_rq=E_RES, epilogue="resadd", aux=f"{p}.x1",
+                            aux_shift=add_shift(E_RES, E_RES, f"{p}.x2"))
+            else:
+                self.linear(fq, f"{p}_wd", f"{p}_bd", f"{p}.d", "i16")
+                self.ops.append({"op": "add", "a": f"{p}.x1", "b": f"{p}.d", "out": f"{p}.x2", "sh_b": add_shift(E_RES, E_RES, f"{p}.x2")})
+            residual = f"{p}.x2"
+        self.rmsnorm(residual, "norm", "hn")
+        hnq = self.quant("hn")
+        self.linear(hnq, "lm_head", "lm_head_bias", "logits", "i16", N_pad=vocab_padded)
+
+        return {
+            "model": {"dim": dim, "n_layers": L, "n_heads": H, "n_kv_heads": Hkv, "head_dim": D, "ffn": ffn, "vocab": vocab,
+                      "vocab_padded": vocab_padded, "max_seq": max_seq, "E_RES": E_RES, "E_LOGIT": E_LOGIT},
+            "weights_file": "qweights.bin",
+            "tensors": self.blob.tensors,
+            "ops": self.ops,
+            "input": "input", "output": "logits",
+            "exps": self.exps, "scales": self.scales,
+            "fusion": self.fusion,
+        }
+
+
+def quantize_export(export_dir: Path, out_dir: Path, fusion: bool = False) -> dict:
+    """Quantize `export_dir` (model.mlir + weights.* + calib.json) into `out_dir/{qgraph.json, qweights.bin}`."""
+    export_dir, out_dir = Path(export_dir), Path(out_dir)
+    cfg, W, calib = load_export(export_dir)
+    q = RefQuantizer(cfg, W, calib, fusion)
+    qgraph = q.run()
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "qweights.bin").write_bytes(b"".join(blob.parts))
+    (out_dir / "qweights.bin").write_bytes(q.blob.bytes())
     with open(out_dir / "qgraph.json", "w") as f:
         json.dump(qgraph, f, indent=1)
     tok = export_dir / "tokenizer.json"
@@ -290,14 +458,17 @@ def quantize_export(export_dir: Path, out_dir: Path, fuse: bool = False, rms_rat
 
 
 def main(argv=None) -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="reference quantizer (Python twin of llaccel-quantize / llaccel-fuse)")
     ap.add_argument("export_dir")
-    ap.add_argument("-o", "--out", default="build/q/")
-    ap.add_argument("--fuse", action="store_true")
+    ap.add_argument("-o", "--out", default="build/q-ref/")
+    ap.add_argument("--fusion", "--fuse", dest="fusion", action="store_true", help="emit v2 epilogue-fused linears")
     args = ap.parse_args(argv)
-    g = quantize_export(Path(args.export_dir), Path(args.out), fuse=args.fuse)
-    print(f"wrote {args.out}: {len(g['ops'])} ops, {len(g['tensors'])} tensors, E_RES={g['model']['E_RES']} "
-          f"E_LOGIT={g['model']['E_LOGIT']} fusion={args.fuse}")
+    g = quantize_export(Path(args.export_dir), Path(args.out), fusion=args.fusion)
+    counts: dict[str, int] = {}
+    for op in g["ops"]:
+        counts[op["op"]] = counts.get(op["op"], 0) + 1
+    print(f"wrote {args.out}: {len(g['ops'])} ops {counts}, {len(g['tensors'])} tensors, E_RES={g['model']['E_RES']} "
+          f"E_LOGIT={g['model']['E_LOGIT']} fusion={args.fusion}")
     GoldenModel(args.out)  # load check
 
 

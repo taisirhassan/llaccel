@@ -10,9 +10,10 @@ import numpy as np
 import pytest
 
 from llaccel import golden as G
-from llaccel.refquant import Blob, mulshift_params
+from llaccel.refquant import Blob, normalize_mulshift as mulshift_params
 
 DIM, H, HKV, D, FFN, VOCAB, MAXSEQ = 32, 2, 1, 16, 64, 16, 64
+OPS_PER_LAUNCH_V1 = 25  # op outputs (24; kv_write has none) + input
 E_RES, E_H, E_QK, E_G, E_SG, E_F, E_LOGIT = -10, -12, -12, -12, -13, -14, -8
 S_H, S_QK, S_V, S_A, S_H2, S_F, S_HN = 3 / 127, 2 / 127, 1.5 / 127, 1.2 / 127, 3 / 127, 1 / 127, 3 / 127
 
@@ -118,12 +119,19 @@ def test_prefill_decode_runs_and_is_deterministic(fixture_dirs):
         recs.append(g.generate(prompt, 12))
     assert recs[0] == recs[1]
     r = recs[0]
-    assert len(r["generated"]) == 12 and len(r["steps"]) == 2 + 11 and len(r["logits_last_rows"]) == 13
+    # runtime launch sequence: 2 prefill chunks + one decode launch per generated token
+    assert len(r["generated"]) == 12 and len(r["steps"]) == 2 + 12 and len(r["logits_last_rows"]) == 14
+    assert len(r["argmax_per_step"]) == 14 and r["generated"] == r["argmax_per_step"][1:13]
     assert r["steps"][0] == {"kind": "prefill", "pos": 0, "rows": 16, "valid_rows": 16}
     assert r["steps"][1] == {"kind": "prefill", "pos": 16, "rows": 16, "valid_rows": 4}
     assert r["steps"][2] == {"kind": "decode", "pos": 20, "rows": 1, "valid_rows": 1}
+    assert r["steps"][-1] == {"kind": "decode", "pos": 31, "rows": 1, "valid_rows": 1}
     assert all(0 <= t < VOCAB for t in r["generated"])
+    assert all(len(row) == VOCAB for row in r["logits_last_rows"])  # `vocab` entries, not vocab_padded
     assert all(-32768 <= v <= 32767 for row in r["logits_last_rows"] for v in row)
+    # the recorded argmax is the lowest index among ties over the first `vocab` logits
+    for row, am in zip(r["logits_last_rows"], r["argmax_per_step"]):
+        assert row[am] == max(row) and am == row.index(max(row))
     # activations are not degenerate
     acts = []
     G.GoldenModel(v1).prefill(prompt, acts)
@@ -160,12 +168,16 @@ def test_golden_cli_and_dump_acts(fixture_dirs, tmp_path):
     acts = tmp_path / "acts"
     G.main(["--qgraph", str(v1), "--prompt", "abcde", "--tokens", "5", "-o", str(out), "--dump-acts", str(acts)])
     rec = json.loads(out.read_text())
-    assert rec["prompt_tokens"] == [0, 1, 2, 3, 4] and len(rec["generated"]) == 5 and len(rec["argmax_per_step"]) == 5
-    assert rec["argmax_per_step"] == rec["generated"]
+    assert rec["prompt_tokens"] == [0, 1, 2, 3, 4] and len(rec["generated"]) == 5 and len(rec["argmax_per_step"]) == 6
+    assert rec["argmax_per_step"][:5] == rec["generated"]  # last decode launch's argmax is not a generated token
     files = sorted(acts.glob("*.npy"))
-    assert len(files) == 5 * 27  # 5 launches x (26 op outputs + input)
+    assert len(files) == 6 * OPS_PER_LAUNCH_V1
     assert np.load(acts / "step000_prefill_pos0_logits.npy").shape == (16, VOCAB)
     assert np.load(acts / "step001_decode_pos5_l0.a.npy").shape == (1, H * D)
+    assert np.load(acts / "step005_decode_pos9_l0.kr.q.npy").shape == (1, HKV * D)
+    # the golden.json logits row is the relevant row of the dumped logits activation
+    assert np.load(acts / "step000_prefill_pos0_logits.npy")[4, :VOCAB].tolist() == rec["logits_last_rows"][0]
+    assert np.load(acts / "step003_decode_pos7_logits.npy")[0, :VOCAB].tolist() == rec["logits_last_rows"][3]
     from llaccel.verify import compare_sim
     ok, msg = compare_sim(out, out)
     assert ok and msg.startswith("MATCH")
@@ -183,36 +195,43 @@ def test_position_overflow_is_an_error(fixture_dirs):
         G.GoldenModel(v1).generate(list(range(10)), MAXSEQ)
 
 
-def test_full_python_pipeline(tmp_path):
+def test_last_position_skips_the_decode_launch_like_the_runtime(fixture_dirs):
+    """host.cpp stops launching when L + i + 1 >= max_seq; the token is still emitted."""
+    v1, _ = fixture_dirs
+    r = G.GoldenModel(v1).generate(list(range(10)), MAXSEQ - 10)
+    assert len(r["generated"]) == MAXSEQ - 10
+    assert len(r["steps"]) == 1 + (MAXSEQ - 10 - 1) and r["steps"][-1]["pos"] == MAXSEQ - 2
+    assert len(r["argmax_per_step"]) == len(r["logits_last_rows"]) == len(r["steps"])
+
+
+def test_prefill_pad_rows_do_not_affect_valid_rows(fixture_dirs):
+    """Causality: rows 0..11 of a chunk with 12 valid + 4 zero pad rows == rows 0..11 of the full 16-row chunk."""
+    v1, _ = fixture_dirs
+    toks = [(3 + i) % VOCAB for i in range(20)]
+    a = G.GoldenModel(v1).prefill(toks)
+    b = G.GoldenModel(v1).prefill(toks[:12])
+    assert len(b) == 12
+    for x, y in zip(a[:12], b):
+        assert np.array_equal(x, y)
+
+
+def test_full_python_pipeline(tiny_export):
     """export -> calibrate (synthetic corpus) -> reference quantizer (v1 and v2) -> golden -> verify."""
-    import torch
-    from llaccel.export import export_dir
-    from llaccel.model import ModelConfig, TinyLlama
+    from llaccel.data import CharTokenizer
     from llaccel.refquant import quantize_export
     from llaccel.verify import compare_models
-    from llaccel.data import CharTokenizer
 
-    cfg = ModelConfig(dim=32, n_layers=2, n_heads=2, n_kv_heads=1, head_dim=16, ffn=64, vocab=16, max_seq=64, qkv_bias=True)
-    torch.manual_seed(5)
-    model = TinyLlama(cfg).eval()
-    with torch.no_grad():  # give the untrained model some structure
-        for p in model.parameters():
-            p.mul_(4.0)
-    itos = [chr(97 + i) for i in range(16)]
-    data = tmp_path / "data"
-    data.mkdir()
-    rng = np.random.default_rng(0)
-    (data / "input.txt").write_text("".join(itos[i] for i in rng.integers(0, 16, 20000)))
-    ex = tmp_path / "export"
-    export_dir(model, ex, cfg, {"itos": itos}, calib_seqs=8, calib_len=48, calib_data=data)
+    ex, model, cfg, itos = tiny_export
     assert {p.name for p in ex.iterdir()} == {"model.mlir", "weights.bin", "weights.json", "calib.json", "tokenizer.json"}
     calib = json.loads((ex / "calib.json").read_text())
     assert "input" in calib and "l1.x2" in calib and "logits" in calib and len(calib) == 2 + 16 * 2 + 1
-    q1 = quantize_export(ex, tmp_path / "q1", fuse=False)
-    q2 = quantize_export(ex, tmp_path / "q2", fuse=True)
-    assert len(q1["ops"]) == 2 * 23 + 3 and len(q2["ops"]) == 2 * 19 + 3
-    g1, g2 = G.GoldenModel(tmp_path / "q1"), G.GoldenModel(tmp_path / "q2")
+    q1 = quantize_export(ex, ex.parent / "q1", fusion=False)
+    q2 = quantize_export(ex, ex.parent / "q2", fusion=True)
+    assert len(q1["ops"]) == 2 * 22 + 3 and len(q2["ops"]) == 2 * 18 + 3  # v2 drops add, silu, mul, add per layer
+    g1, g2 = G.GoldenModel(ex.parent / "q1"), G.GoldenModel(ex.parent / "q2")
     assert g1.generate([0, 1, 2], 20) == g2.generate([0, 1, 2], 20)
-    r = compare_models(model, CharTokenizer(itos), tmp_path / "q1", "abc", 10)
-    assert r["n_steps"] == 10 and 0.0 <= r["top1_agreement"] <= 1.0 and -1.0 <= r["mean_cosine"] <= 1.0
+    r = compare_models(model, CharTokenizer(itos), ex.parent / "q1", "abc", 10)
+    assert r["n_steps"] == 11 and 0.0 <= r["top1_agreement"] <= 1.0 and -1.0 <= r["mean_cosine"] <= 1.0
     assert len(r["golden_text"]) == 10 and len(r["fp32_text"]) == 10
+
+

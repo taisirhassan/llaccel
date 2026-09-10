@@ -246,12 +246,24 @@ class Layout:
         return core == [T, C(cols, 1, 1)]
 
     def heads(self) -> tuple[int, int, int] | None:
-        """[B..., C(H, D, div), T, C(D, 1, 1)] -> (H, D, div) — the attention/rope head layout."""
+        """[B..., C(H, D, div), T, C(D, 1, 1)] -> (H, D, div) — the attention/rope head layout.
+
+        Two degenerate forms are accepted: a single head (`view(1, T, 1, D)` leaves no column dim
+        for H, so the layout is [B..., T, C(D)]) and heads replicated from a single KV head
+        (`expand`/`repeat_interleave` of a size-1 dim gives C(H, stride=0), i.e. every query head
+        reads KV head 0, which is div = H)."""
         core = [d for d in self.dims if d != B]
+        if len(core) == 2 and core[0] == T and isinstance(core[1], C):
+            dd = core[1]
+            if dd.stride == 1 and dd.div == 1:
+                return 1, dd.size, 1
         if len(core) == 3 and core[1] == T and isinstance(core[0], C) and isinstance(core[2], C):
             hd, dd = core[0], core[2]
-            if dd.stride == 1 and dd.div == 1 and hd.stride == dd.size:
-                return hd.size, dd.size, hd.div
+            if dd.stride == 1 and dd.div == 1:
+                if hd.stride == dd.size:
+                    return hd.size, dd.size, hd.div
+                if hd.stride == 0:
+                    return hd.size, dd.size, hd.size
         return None
 
 
@@ -427,9 +439,12 @@ def plumb(kind: str, n: fx.Node, v: View) -> View:
     if kind == "aten.repeat_interleave.self_int":
         rep, dim = n.args[1], n.args[2]
         d = dims[dim]
-        if not isinstance(d, C):
-            fail("repeat_interleave on a non-column dim", n)
-        dims[dim] = C(d.size * rep, d.stride, d.div * rep)
+        if d == B:  # replicating a size-1 dim: every index maps to the same columns
+            dims[dim] = C(rep, 0, 1)
+        elif isinstance(d, C):
+            dims[dim] = C(d.size * rep, d.stride, d.div * rep)
+        else:
+            fail("repeat_interleave along the token dim", n)
         return View(v.t, Layout(tuple(dims)))
     fail("unhandled plumbing op", n)
 

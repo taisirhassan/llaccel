@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from llaccel import golden as G
-from llaccel.refquant import exp_for, mulshift_params
+from llaccel.refquant import i16_exponent, normalize_mulshift
 
 RNG = np.random.default_rng(1234)
 
@@ -51,17 +51,27 @@ def test_udiv():
 
 def test_mulshift_params_and_exp():
     for r in [1e-6, 0.001, 0.37, 1.0, 3.5, 1000.0]:
-        M, S = mulshift_params(r)
+        M, S = normalize_mulshift(r)
         assert 2**30 <= M < 2**31 and 0 <= S <= 63
         assert abs(M * 2.0**-S / r - 1) < 1e-8
-    assert exp_for(32767.0) == 0 and exp_for(1.0) == -14 and exp_for(0.5) == -15
+    assert i16_exponent(32767.0) == 0 and i16_exponent(1.0) == -14 and i16_exponent(0.5) == -15
+
+
+def test_mulshift_realises_ratio_within_rounding():
+    """mulshift(v, M, S) == round(v * r) up to the 2^-31 relative error of M, for i32 v."""
+    for r in [0.5, 0.37, 1.0 / 3.0, 3.5, 2.0**-10, 1000.0]:
+        M, S = normalize_mulshift(r)
+        v = RNG.integers(-(2**30), 2**30, 2000)
+        got = G.mulshift(v, M, S)
+        exact = v.astype(np.float64) * r
+        assert np.all(np.abs(got - exact) <= 0.5 + np.abs(exact) * 2.0**-30)
 
 
 # ---- float references ----------------------------------------------------------------------
 def test_silu16_vs_float():
     e_x, e_y = -12, -12
     x = RNG.integers(-32768, 32768, 4096)
-    Mi, Si = mulshift_params(2.0 ** (e_x + 12))
+    Mi, Si = normalize_mulshift(2.0 ** (e_x + 12))
     y = G.silu16(x, Mi, Si, 16 + e_y - e_x)
     xr = x * 2.0**e_x
     ref = xr / (1 + np.exp(-xr))
@@ -72,7 +82,7 @@ def test_silu16_vs_float():
 def test_rmsnorm_vs_float():
     K, e_x, e_y = 128, -10, -12
     g = RNG.uniform(0.5, 2.0, K)
-    e_g = exp_for(np.abs(g).max())
+    e_g = i16_exponent(np.abs(g).max())
     gq = np.round(g / 2.0**e_g).astype(np.int64)
     R = 24
     C = int(round(2.0**R * math.sqrt(K)))
@@ -110,9 +120,9 @@ def test_attention_head_vs_float_softmax():
     D = 32
     s_q = s_k = 0.02
     s_v = 0.03
-    s_out = 0.02
-    Ms, Ss = mulshift_params(256.0 * s_q * s_k / math.sqrt(D))
-    Mo, So = mulshift_params(s_v / (256.0 * s_out))
+    s_out = 0.03  # a softmax-weighted average of v never exceeds max|v|, so s_out = s_v cannot saturate
+    Ms, Ss = normalize_mulshift(256.0 * s_q * s_k / math.sqrt(D))
+    Mo, So = normalize_mulshift(s_v / (256.0 * s_out))
     for T in (1, 5, 40, 200):
         q = RNG.integers(-127, 128, D)
         k = RNG.integers(-127, 128, (T, D))
@@ -123,8 +133,19 @@ def test_attention_head_vs_float_softmax():
         p /= p.sum()
         ref = p @ (v * s_v)
         err = np.abs(out * s_out - ref)
-        assert err.max() < 0.15, (T, err.max())  # u8 probabilities + i8 output
+        # u8 probabilities (1/256 each, T of them) + i8 output (s_out/2) + 65535-scaled exp LUTs
+        assert err.max() < 0.15, (T, err.max())
         assert np.corrcoef(out * s_out, ref)[0, 1] > 0.99
+
+
+def test_attention_single_key_is_identity_up_to_pn_rounding():
+    """T = 1: p = 65534, inv = 32769, pn = satu8((65534*32769 + 2^22) >> 23) = 255, so o = 255 * v."""
+    D = 16
+    q = RNG.integers(-127, 128, D)
+    v = RNG.integers(-127, 128, (1, D))
+    Mo, So = normalize_mulshift(1.0 / 255.0)  # exactly undo the 255 so out == v
+    out = G.attention_head(q, RNG.integers(-127, 128, (1, D)), v, 2**30, 40, Mo, So)
+    assert np.array_equal(out, v[0])
 
 
 def test_attention_probabilities_sum_property():
@@ -140,3 +161,34 @@ def test_vmul_vadd_vquant():
     assert G.vmul(a, b, 10).tolist() == [977, -977, 32767]
     assert G.vadd(a, b, 1).tolist() == [1500, -500, 32767]
     assert G.vquant(np.array([32767, -32768, 100]), 2**30, 38).tolist() == [127, -128, 0]
+
+
+def test_silu16_exact_lut_points():
+    """At u = 256*j (f = 0) the interpolation is exact: y = rshr(x * SIG[j+128], sh_out)."""
+    Mi, Si, sh = 2**30, 30, 16  # e_x = -12: u = x (Q3.12 already)
+    for x in (-32768, -4096, -256, 0, 256, 4096, 32512):
+        idx = (x >> 8) + 128
+        assert G.silu16(np.array([x]), Mi, Si, sh)[0] == G.sat16(G.rshr(np.array([x * int(G.SIG[idx])]), sh))[0]
+    assert G.silu16(np.array([0]), Mi, Si, sh)[0] == 0
+    # at a LUT point the only errors are the two roundings (table entry, output shift): <= 1 unit
+    for x in (32000, -32000, 256 * 100):
+        ref = x / (1.0 + math.exp(-x / 4096.0))
+        assert abs(int(G.silu16(np.array([x]), Mi, Si, sh)[0]) - ref) <= 1.0
+
+
+def test_rmsnorm_zero_row_and_inv_clamp():
+    """All-zero row (prefill padding) stays zero; tiny rows hit the inv = 65535 clamp without overflow."""
+    K = 32
+    g = np.full(K, 16384)
+    C = int(round(2.0**24 * math.sqrt(K)))
+    assert np.all(G.rmsnorm(np.zeros((1, K), np.int64), g, 3, C, 20) == 0)
+    y = G.rmsnorm(np.ones((1, K), np.int64), g, 0, C, 20)[0]
+    assert np.all(y == G.sat16(G.rshr(np.array([16384 * 65535]), 20))[0])
+
+
+def test_rope_position_zero_is_identity_and_exponent_preserved():
+    D, H = 16, 2
+    x = RNG.integers(-32768, 32768, (2, H * D))
+    cos_t = np.full((4, D // 2), 16384)  # cos(0) = 1.0 in Q1.14
+    sin_t = np.zeros((4, D // 2), np.int64)
+    assert np.array_equal(G.rope(x, H, D, cos_t, sin_t, 0), x)
