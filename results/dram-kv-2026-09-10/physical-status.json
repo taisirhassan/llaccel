@@ -1,0 +1,23 @@
+{
+  "status": "BLOCKED_RESOURCE_LIMIT",
+  "updated_utc": "2026-09-11T00:49:54.723774+00:00",
+  "v1_completed_stage": "global_route",
+  "v2_completed_stage": "synthesis",
+  "failure_stage": "v1 detailed-route track assignment",
+  "failure": "Docker OOM kill; eight-thread and two-thread runs both failed",
+  "physical_complete": false,
+  "timing_closed": false,
+  "v1_core_area_um2": 2083809,
+  "v1_global_route_setup_slack_ns": -4.13,
+  "clock_constraint_ns": 3.0,
+  "external_sram_included": false,
+  "evidence": {
+    "work/physical-transition/detail-two-core-oom/physical-console.log": "188d34b5ca31ab9560ab2b14aca1a6bda90afea9876adc0af63892613ea766ba",
+    "work/physical-transition/detail-two-core-oom/v1-detail-two-core.log": "156a9ae55a20817673268c91771cda2f86426766db2f324586731eb593d6afa2",
+    "work/physical-transition/detail-two-core-oom/oom-events.log": "d3cb89ceb9bda667baa60eed74022d5b2fc41399d26fa6fdd7ae6eb058369c5e"
+  },
+  "resume_command": ".venv/bin/python3 synth/run_native_orfs.py --snapshot final-dram-kv --variant v1 --skip-adder-extraction --single-pass-abc --reuse-mapped --physical --repair-max-iterations 500 --skip-physical-lec --skip-vectorless-power --physical-cores 8 --skip-post-route-repair --detail-route-cores 2 --reuse-pin-access",
+  "next_requirement": "More available RAM and disk for this full-core route, or a separately validated smaller or partitioned physical design; current host configuration has failed.",
+  "temporary_swap_cleanup": "Removed task-owned /var/lib/docker/llaccel-physical.swap after failed routing; default Docker swap retained.",
+  "cleanup_log": "work/physical-transition/swap-cleanup.log"
+}

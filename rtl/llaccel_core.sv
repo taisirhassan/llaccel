@@ -4,7 +4,8 @@
 module llaccel_core
   import llaccel_pkg::*;
 #(
-  parameter bit EPILOGUE_FUSION = 1'b0
+  parameter bit EPILOGUE_FUSION = 1'b0,
+  parameter int unsigned DMA_MAX_OUTSTANDING = 16
 ) (
   input  logic               clk,
   input  logic               rst_n,
@@ -58,6 +59,11 @@ module llaccel_core
   logic [DRAM_DW-1:0] dma_dram_req_wdata;
   logic [DRAM_BEAT-1:0] dma_dram_req_wstrb;
 
+  logic attn_dram_req_valid, attn_dram_req_we, attn_dram_req_ready, attn_dram_rsp_valid;
+  logic [31:0] attn_dram_req_addr;
+  logic [511:0] attn_dram_req_wdata;
+  logic [63:0] attn_dram_req_wstrb;
+
   // ---- SRAM ports -------------------------------------------------------------------------
   logic          gemm_w_valid, gemm_w_grant, gemm_w_rvalid;
   sram_req_t     gemm_w_req;
@@ -103,7 +109,7 @@ module llaccel_core
   logic [1:0] gemm_p_stall;
   logic dma_p_busy, dma_p_stall, dma_p_wait;
   logic vec_p_busy, vec_p_stall;
-  logic attn_p_busy, attn_p_stall, attn_p_mac;
+  logic attn_p_busy, attn_p_stall, attn_p_mac, attn_p_dram_wait;
 
   // =============================================================================
   cmd_proc u_cp (
@@ -121,12 +127,15 @@ module llaccel_core
     .dma_req_valid(dma_dram_req_valid), .dma_req_we(dma_dram_req_we), .dma_req_addr(dma_dram_req_addr),
     .dma_req_wdata(dma_dram_req_wdata), .dma_req_wstrb(dma_dram_req_wstrb), .dma_req_ready(dma_dram_req_ready),
     .dma_rsp_valid(dma_dram_rsp_valid),
+    .attn_req_valid(attn_dram_req_valid),.attn_req_we(attn_dram_req_we),.attn_req_addr(attn_dram_req_addr),
+    .attn_req_wdata(attn_dram_req_wdata),.attn_req_wstrb(attn_dram_req_wstrb),
+    .attn_req_ready(attn_dram_req_ready),.attn_rsp_valid(attn_dram_rsp_valid),
     .cp_req_valid(fetch_req_valid), .cp_req_addr(fetch_req_addr), .cp_req_ready(fetch_req_ready), .cp_rsp_valid(fetch_rsp_valid),
     .rsp_rdata(arb_rsp_rdata),
     .dram_req_valid, .dram_req_ready, .dram_req_we, .dram_req_addr, .dram_req_wdata, .dram_req_wstrb,
     .dram_rsp_valid, .dram_rsp_rdata);
 
-  dma_engine u_dma (
+  dma_engine #(.MAX_OUTSTANDING(DMA_MAX_OUTSTANDING)) u_dma (
     .clk, .rst_n,
     .instr_valid(dma_iv), .instr(dma_instr), .instr_ready(dma_ir), .busy(dma_busy), .done_pulse(dma_done), .done_sig_sem(dma_sig),
     .dram_req_valid(dma_dram_req_valid), .dram_req_we(dma_dram_req_we), .dram_req_addr(dma_dram_req_addr),
@@ -157,7 +166,10 @@ module llaccel_core
     .instr_valid(attn_iv), .instr(attn_instr), .instr_ready(attn_ir), .pos, .busy(attn_busy), .done_pulse(attn_done), .done_sig_sem(attn_sig),
     .attn_rd_valid, .attn_rd_req, .attn_rd_grant, .attn_rd_rvalid, .attn_rd_rdata,
     .attn_wr_valid, .attn_wr_req, .attn_wr_wdata, .attn_wr_wstrb, .attn_wr_grant,
-    .perf_busy(attn_p_busy), .perf_sram_stall(attn_p_stall), .perf_mac_cycles(attn_p_mac));
+    .dram_req_valid(attn_dram_req_valid),.dram_req_we(attn_dram_req_we),.dram_req_addr(attn_dram_req_addr),
+    .dram_req_wdata(attn_dram_req_wdata),.dram_req_wstrb(attn_dram_req_wstrb),.dram_req_ready(attn_dram_req_ready),
+    .dram_rsp_valid(attn_dram_rsp_valid),.dram_rsp_rdata(arb_rsp_rdata),
+    .perf_dram_wait(attn_p_dram_wait), .perf_busy(attn_p_busy), .perf_sram_stall(attn_p_stall), .perf_mac_cycles(attn_p_mac));
 
   sram_xbar u_xbar (
     .clk, .rst_n,
@@ -209,6 +221,9 @@ module llaccel_core
     inc[PERF_DRAM_WR_BYTES]        = dram_wr_accept ? 16'(DRAM_BEAT) : 16'd0;
     inc[PERF_GEMM_IDLE_QEMPTY]     = {15'd0, cp_running && !gemm_busy && gemm_q_empty};
     inc[PERF_VEC_IDLE_QEMPTY]      = {15'd0, cp_running && !vec_busy  && vec_q_empty};
+    inc[PERF_ATTN_DRAM_WAIT] = {15'd0, attn_p_dram_wait};
+    inc[PERF_ATTN_DRAM_RD_BYTES] = (attn_dram_req_valid && attn_dram_req_ready && !attn_dram_req_we) ? 16'(DRAM_BEAT) : 16'd0;
+    inc[PERF_ATTN_DRAM_WR_BYTES] = (attn_dram_req_valid && attn_dram_req_ready && attn_dram_req_we) ? 16'(DRAM_BEAT) : 16'd0;
     inc[PERF_ATTN_IDLE_QEMPTY]     = {15'd0, cp_running && !attn_busy && attn_q_empty};
   end
 

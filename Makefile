@@ -4,8 +4,14 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-CXX      ?= /opt/homebrew/opt/llvm/bin/clang++
-CC       ?= /opt/homebrew/opt/llvm/bin/clang
+ifeq ($(origin CXX),default)
+CXX := /opt/homebrew/opt/llvm/bin/clang++
+endif
+ifeq ($(origin CC),default)
+CC := /opt/homebrew/opt/llvm/bin/clang
+endif
+CXX ?= /opt/homebrew/opt/llvm/bin/clang++
+CC ?= /opt/homebrew/opt/llvm/bin/clang
 BUILD    ?= build
 CKPT     ?= checkpoints/tiny.pt
 EXPORT   ?= $(BUILD)/export
@@ -37,7 +43,7 @@ build:  ## C++: compiler (MLIR), runtime, Verilated RTL (v1 and v2)
 # compile matrix: v1-inorder, v1-overlap, v2-overlap (v2-inorder for completeness)
 VARIANTS := v1-inorder v1-overlap v2-inorder v2-overlap
 define COMPILE_RULE
-$(BUILD)/$(1).llbin: $(EXPORT)/model.mlir
+$(BUILD)/$(1).llbin: $(EXPORT)/model.mlir $(EXPORT)/weights.bin $(EXPORT)/weights.json $(EXPORT)/calib.json $(COMPILE)
 	$(COMPILE) $(EXPORT)/model.mlir --weights $(EXPORT)/weights.bin --weights-json $(EXPORT)/weights.json \
 	  --calib $(EXPORT)/calib.json --target llaccel-$(word 1,$(subst -, ,$(1))) \
 	  $(if $(findstring v2,$(1)),--enable-fusion,) --schedule $(word 2,$(subst -, ,$(1))) \
@@ -75,11 +81,10 @@ synth:  ## ASIC flow: local yosys elaboration + OpenROAD nangate45 (docker), v1 
 	uv run python scripts/collect_ppa.py v1 --json $(BUILD)/ppa-v1.json
 	uv run python scripts/collect_ppa.py v2 --json $(BUILD)/ppa-v2.json
 
-test:   ## unit tests: python, C++ numerics, RTL engine testbenches, compiler tests
+test: build  ## unit tests: python, C++ numerics, RTL engine testbenches, compiler tests
 	uv run pytest -q tests/python
-	$(BUILD)/cmake/numerics_selftest
+	ctest --test-dir $(BUILD)/cmake --output-on-failure
 	$(MAKE) -C tb all
-	$(MAKE) -C compiler/test
 
 all: setup train export build compile golden sim-func sim-rtl verify experiments
 

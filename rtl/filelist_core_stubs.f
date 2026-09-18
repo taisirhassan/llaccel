@@ -1,6 +1,7 @@
 +incdir+rtl
 rtl/llaccel_pkg.sv
 rtl/llaccel_luts_pkg.sv
+rtl/verilator.vlt
 rtl/sync_fifo.sv
 rtl/sram_xbar.sv
 rtl/dram_arb.sv

@@ -19,12 +19,12 @@ inline constexpr uint32_t kGemmTK = 16;
 inline constexpr uint32_t kGemmTM = 16;
 inline constexpr uint32_t kVecLanes = 16;
 inline constexpr uint32_t kAttnLanes = 64;
-inline constexpr uint32_t kAttnTMax = 256;
+inline constexpr uint32_t kAttnTMax = 4096;
 inline constexpr uint32_t kNumSem = 32;
 inline constexpr uint32_t kQueueDepth = 8;
 inline constexpr uint32_t kDramBeat = 64;
 inline constexpr uint32_t kInstrBytes = 64;
-inline constexpr uint32_t kNumPerf = 24;
+inline constexpr uint32_t kNumPerf = 27;
 inline constexpr uint8_t kNoSem = 0xFF;
 
 // ---- opcodes ----------------------------------------------------------------
@@ -77,6 +77,7 @@ inline constexpr std::string_view opName(Op op) {
 // GEMM epilogue modes (ep word: mode[3:0] | out_i8[4] | aux_shift[15:8])
 enum class Epilogue : uint8_t { NONE = 0, RESADD = 1, SILU = 2, MUL = 3 };
 inline constexpr uint32_t kFlagHasBias = 1u << 0;
+inline constexpr uint32_t kFlagAttnWideProb = 1u << 1;  // Q0.15 probabilities, rescale accumulator to Q0.8
 
 // ---- instruction word ---------------------------------------------------------
 // word0 = opcode | flags<<8 | wait_sem<<16 | signal_sem<<24 ; word1 = wait_val ;
@@ -136,6 +137,7 @@ enum Perf : uint32_t {
   PERF_DMA_BUSY, PERF_DMA_SRAM_STALL, PERF_DMA_DRAM_WAIT,
   PERF_SRAM_RD_BYTES, PERF_SRAM_WR_BYTES, PERF_DRAM_RD_BYTES, PERF_DRAM_WR_BYTES,
   PERF_GEMM_IDLE_QEMPTY, PERF_VEC_IDLE_QEMPTY, PERF_ATTN_IDLE_QEMPTY,
+  PERF_ATTN_DRAM_WAIT, PERF_ATTN_DRAM_RD_BYTES, PERF_ATTN_DRAM_WR_BYTES,
 };
 inline constexpr std::array<std::string_view, kNumPerf> kPerfNames = {
     "cycles", "instr_issued", "cp_stall_wait", "cp_stall_qfull", "cp_stall_fetch",
@@ -143,11 +145,12 @@ inline constexpr std::array<std::string_view, kNumPerf> kPerfNames = {
     "vec_busy", "vec_sram_stall", "attn_busy", "attn_sram_stall", "attn_mac_cycles",
     "dma_busy", "dma_sram_stall", "dma_dram_wait",
     "sram_rd_bytes", "sram_wr_bytes", "dram_rd_bytes", "dram_wr_bytes",
-    "gemm_idle_qempty", "vec_idle_qempty", "attn_idle_qempty"};
+    "gemm_idle_qempty", "vec_idle_qempty", "attn_idle_qempty",
+    "attn_dram_wait", "attn_dram_rd_bytes", "attn_dram_wr_bytes"};
 
 // ---- .llbin container --------------------------------------------------------------
 inline constexpr uint32_t kLlbinMagic = 0x4E424C4Cu;  // "LLBN"
-inline constexpr uint32_t kLlbinVersion = 1;
+inline constexpr uint32_t kLlbinVersion = 2;
 enum class Section : uint32_t { DRAM_IMAGE = 1, PROGRAM = 2, META_JSON = 3 };
 struct SectionHeader {
   uint32_t kind;

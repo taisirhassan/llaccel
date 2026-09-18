@@ -1,0 +1,112 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net">
+  <diagram name="execution-timeline">
+    <mxGraphModel grid="1" gridSize="20" page="1" pageWidth="1080" pageHeight="580">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="two weight buffers · schematic timing, not measured cycles" style="text;html=0;align=left;verticalAlign=middle;fontSize=15;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="24" width="522.0" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="" style="rounded=0;fillColor=#fafafa;strokeColor=#a1a1aa;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="80" width="1020" height="400" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="overlapped schedule" style="text;html=0;align=left;verticalAlign=middle;fontSize=14;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="46" y="89" width="159.6" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="DMA" style="text;html=0;align=left;verticalAlign=middle;fontSize=16;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="60" y="175" width="28.799999999999997" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="GEMM" style="text;html=0;align=left;verticalAlign=middle;fontSize=16;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="60" y="285" width="38.4" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="buffer reuse" style="text;html=0;align=left;verticalAlign=middle;fontSize=14;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="60" y="395" width="100.8" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="8" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="220" y="115" as="sourcePoint" />
+            <mxPoint x="1000" y="115" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="9" value="time →" style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="950" y="85" width="46.8" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="load 0&#10;buffer A" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ecfdf5;strokeColor=#059669;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="220" y="150" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="load 1&#10;buffer B" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ecfdf5;strokeColor=#059669;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="380" y="150" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="load 2&#10;buffer A" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ecfdf5;strokeColor=#059669;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="580" y="150" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="load 3&#10;buffer B" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ecfdf5;strokeColor=#059669;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="780" y="150" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="compute 0&#10;read A" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#eff6ff;strokeColor=#2563eb;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="380" y="260" width="180" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="compute 1&#10;read B" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#eff6ff;strokeColor=#2563eb;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="580" y="260" width="180" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="compute 2&#10;read A" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#eff6ff;strokeColor=#2563eb;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="780" y="260" width="180" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="17" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;dashed=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="215" as="sourcePoint" />
+            <mxPoint x="395" y="260" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="360" y="245" />
+              <mxPoint x="395" y="245" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="18" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;dashed=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="510" y="215" as="sourcePoint" />
+            <mxPoint x="595" y="260" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="510" y="240" />
+              <mxPoint x="595" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="19" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;dashed=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="710" y="215" as="sourcePoint" />
+            <mxPoint x="795" y="260" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="710" y="240" />
+              <mxPoint x="795" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="20" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;dashed=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="560" y="305" as="sourcePoint" />
+            <mxPoint x="610" y="400" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="570" y="305" />
+              <mxPoint x="570" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="21" value="A is free for load 2" style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="620" y="389" width="156.0" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="22" value="load 1 overlaps compute 0; load 2 overlaps compute 1" style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="220" y="429" width="405.59999999999997" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="23" value="wait for a load before reading its buffer; wait for its reader before overwriting it." style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="509" width="663.0" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="24" value="semaphores enforce dependencies. Actual overlap depends on memory stalls and tile sizes." style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="40" y="534" width="686.4" height="22" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

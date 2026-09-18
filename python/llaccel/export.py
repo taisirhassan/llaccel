@@ -618,12 +618,25 @@ class Importer:
         self.input_tensor.name = "input"
 
     def build_rmsnorm(self, n: fx.Node, env: dict) -> None:
-        x = self.canonical(env["x"], n)
+        view = self.views.get(env["x"])
+        if view is None:
+            fail("untracked RMSNorm input", n)
+        x = view.t
         fqn, g = self.param(env["gamma"], "rmsnorm gamma", n)
-        if tuple(g.shape) != (x.cols,):
-            fail(f"rmsnorm gamma shape {tuple(g.shape)} != ({x.cols},)", n)
-        out = self.new_tensor(n, x.cols)
-        self.add_op("rmsnorm", n, [x], out, params={"gamma": (fqn, g)}, attrs={"eps": float(env["eps"])})
+        core = [d for d in view.layout.dims if d != B]
+        if view.layout.is_canonical(x.cols) and tuple(g.shape) == (x.cols,):
+            heads = 1
+        elif (len(core) == 3 and core[0] == T and isinstance(core[1], C)
+              and isinstance(core[2], C) and core[1].div == core[2].div == 1
+              and core[2].stride == 1 and core[1].stride == core[2].size
+              and core[1].size * core[2].size == x.cols
+              and tuple(g.shape) == (core[2].size,)):
+            heads = core[1].size
+        else:
+            fail(f"unsupported RMSNorm layout or gamma shape {tuple(g.shape)}", n)
+        out = self.new_tensor(n, x.cols, view.layout)
+        self.add_op("rmsnorm", n, [x], out, params={"gamma": (fqn, g)},
+                    attrs={"eps": float(env["eps"]), "heads": heads})
 
     def build_linear(self, n: fx.Node, env: dict) -> None:
         x = self.canonical(env["x"], n)
@@ -774,7 +787,15 @@ def assign_roles(imp: Importer, cfg_hint: ModelConfig | None = None) -> Model:
         L = f"l{i}"
         qr_t, kr_t, v_t = attn.inputs
         rq, rk = producer(qr_t, "rope", "attention query", attn), producer(kr_t, "rope", "attention key", attn)
-        lq, lk, lv = (producer(t, "linear", w, attn) for t, w in ((rq.inputs[0], "q"), (rk.inputs[0], "k"), (v_t, "v")))
+        qn = rq.inputs[0].producer if rq.inputs[0].producer and rq.inputs[0].producer.kind == "rmsnorm" else None
+        kn = rk.inputs[0].producer if rk.inputs[0].producer and rk.inputs[0].producer.kind == "rmsnorm" else None
+        if (qn is None) != (kn is None):
+            fail("Q and K must both use per-head normalization or neither", attn.node)
+        lq = producer(qn.inputs[0] if qn else rq.inputs[0], "linear", "q", attn)
+        lk = producer(kn.inputs[0] if kn else rk.inputs[0], "linear", "k", attn)
+        lv = producer(v_t, "linear", "v", attn)
+        if qn and (qn.attrs["heads"] != attn.attrs["heads"] or kn.attrs["heads"] != attn.attrs["kv_heads"]):
+            fail("Q/K normalization must operate independently on each head", attn.node)
         h_t = lq.inputs[0]
         if lk.inputs[0] is not h_t or lv.inputs[0] is not h_t:
             fail("q/k/v projections must share the same normalized input", attn.node)
@@ -814,6 +835,10 @@ def assign_roles(imp: Importer, cfg_hint: ModelConfig | None = None) -> Model:
         take(lq, "q", i, {"w": f"{L}_wq", "b": f"{L}_bq"})
         take(lk, "k", i, {"w": f"{L}_wk", "b": f"{L}_bk"})
         take(lv, "v", i, {"w": f"{L}_wv", "b": f"{L}_bv"})
+        if qn:
+            eps_set.update((qn.attrs["eps"], kn.attrs["eps"]))
+            take(qn, "qn", i, {"gamma": f"{L}_q_norm"})
+            take(kn, "kn", i, {"gamma": f"{L}_k_norm"})
         take(rq, "qr", i, {})
         take(rk, "kr", i, {})
         take(attn, "a", i, {})
@@ -851,7 +876,16 @@ def assign_roles(imp: Importer, cfg_hint: ModelConfig | None = None) -> Model:
         fail("embedding / lm_head vocab mismatch", lm.node)
     cos, sin = rope_tabs
     max_seq = int(cos.shape[0])
-    rope_base = derive_rope_base(cos, sin, D, cfg_hint.rope_base if cfg_hint else None)
+    if cfg_hint is not None and cfg_hint.rope_scaling:
+        from .rope import build_rope_tables
+        expected_cos, expected_sin = build_rope_tables(cfg_hint)
+        if not (torch.allclose(cos, expected_cos, atol=1e-5, rtol=1e-5) and
+                torch.allclose(sin, expected_sin, atol=1e-5, rtol=1e-5)):
+            fail("RoPE tables disagree with declared static scaling", lm.node)
+        rope_base = cfg_hint.rope_base
+        weights.extend((("rope_cos_input", cos[:, :D // 2]), ("rope_sin_input", sin[:, :D // 2])))
+    else:
+        rope_base = derive_rope_base(cos, sin, D, cfg_hint.rope_base if cfg_hint else None)
     cfg = dict(dim=dim, n_layers=len(attns), n_heads=H, n_kv_heads=Hkv, head_dim=D, ffn=ffn, vocab=int(vocab),
                max_seq=max_seq, rope_base=rope_base, rms_eps=next(iter(eps_set)))
     if cfg_hint is not None:
@@ -859,6 +893,9 @@ def assign_roles(imp: Importer, cfg_hint: ModelConfig | None = None) -> Model:
             hv = getattr(cfg_hint, k)
             if (abs(v - hv) > 1e-9 if isinstance(v, float) else v != hv):
                 fail(f"derived model attribute {k}={v} disagrees with checkpoint config {hv}", lm.node)
+    if cfg_hint is not None:
+        cfg["qk_norm"] = cfg_hint.qk_norm
+        cfg["rope_scaling"] = cfg_hint.rope_scaling
     return Model(cfg, weights, ordered, imp.input_tensor, imp.output, names, imp.ep)
 
 
@@ -925,7 +962,7 @@ def emit_mlir(m: Model) -> str:
         r, nm = _ssa(op), op.out.name
         ins = op.inputs
         if op.kind == "rmsnorm":
-            out.append(f"    {r} = llaccel.rmsnorm {_ref(ins[0])}, @{op.attrs['w_gamma']} {{eps = {eps} : f64, "
+            out.append(f"    {r} = llaccel.rmsnorm {_ref(ins[0])}, @{op.attrs['w_gamma']} {{eps = {eps} : f64, heads = {op.attrs.get('heads', 1)} : i64, "
                        f"llaccel.name = \"{nm}\"}} : {_ty(op.out)}")
         elif op.kind == "linear":
             ws = f"@{op.attrs['w_w']}" + (f", @{op.attrs['w_b']}" if "w_b" in op.attrs else "")

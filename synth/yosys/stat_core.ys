@@ -1,9 +1,9 @@
-# Quick local generic synthesis of llaccel_core (no liberty): gate-level cell
-# counts for a first look at relative area of v1 vs v2. Real PPA comes from ORFS.
-#   FUSION=1 yosys -s synth/yosys/stat_core.ys
+# Yosys command template, rendered by synth/run_yosys.sh.
+# Run: synth/run_yosys.sh stat v1|v2
 plugin -i slang
-read_slang -f rtl/filelist.f --top llaccel_core -G EPILOGUE_FUSION=$FUSION
+read_slang -f rtl/filelist.f --top llaccel_core -G EPILOGUE_FUSION=@FUSION@ -G DMA_MAX_OUTSTANDING=@DMA_DEPTH@
 hierarchy -top llaccel_core -check
 synth -top llaccel_core -flatten
 opt_clean
+check -assert
 stat -width

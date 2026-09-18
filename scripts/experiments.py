@@ -22,9 +22,10 @@ def load(p: Path):
 
 
 def decode_stats(res: dict) -> dict:
-    """Average per-launch counters over decode launches (M == 1) and sum prefill."""
-    dec = [s for s in res["steps"] if s["M"] == 1]
-    pre = [s for s in res["steps"] if s["M"] != 1]
+    """Average actual decode launches and sum prefill, including configurable M=1."""
+    prompt_length = len(res["prompt_tokens"])
+    dec = [s for s in res["steps"] if s["pos"] >= prompt_length]
+    pre = [s for s in res["steps"] if s["pos"] < prompt_length]
     keys = dec[0]["perf"].keys() if dec else pre[0]["perf"].keys()
     out = {"decode_launches": len(dec), "prefill_launches": len(pre)}
     for k in keys:

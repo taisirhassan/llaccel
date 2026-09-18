@@ -41,7 +41,7 @@ module vec_engine
   assign perf_busy    = active;
   assign perf_sram_stall = 1'b0;
 
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       active <= 1'b0;
       sig    <= NO_SEM;

@@ -47,13 +47,14 @@ module tb_vec_top (
   assign rd1_active = rd1_valid && rd1_grant;
   assign wr_active  = wr_valid && wr_grant;
 
-  // Port-holding rule: an ungranted request must be held unchanged next cycle.
+  // Port-holding rule: an ungranted request must be held unchanged next cycle
+  // (no reset needed: the engine presents no request while in reset).
   sram_req_t rd0_req_q, rd1_req_q, wr_req_q;
   logic rd0_held, rd1_held, wr_held;
   always_ff @(posedge clk) begin
-    rd0_held <= rst_n && rd0_valid && !rd0_grant; rd0_req_q <= rd0_req;
-    rd1_held <= rst_n && rd1_valid && !rd1_grant; rd1_req_q <= rd1_req;
-    wr_held  <= rst_n && wr_valid  && !wr_grant;  wr_req_q  <= wr_req;
+    rd0_held <= rd0_valid && !rd0_grant; rd0_req_q <= rd0_req;
+    rd1_held <= rd1_valid && !rd1_grant; rd1_req_q <= rd1_req;
+    wr_held  <= wr_valid  && !wr_grant;  wr_req_q  <= wr_req;
     if (rd0_held && !(rd0_valid && rd0_req == rd0_req_q)) $fatal(1, "vec rd0 request dropped/changed while ungranted");
     if (rd1_held && !(rd1_valid && rd1_req == rd1_req_q)) $fatal(1, "vec rd1 request dropped/changed while ungranted");
     if (wr_held  && !(wr_valid  && wr_req  == wr_req_q))  $fatal(1, "vec wr request dropped/changed while ungranted");

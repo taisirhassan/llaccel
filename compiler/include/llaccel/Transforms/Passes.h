@@ -2,6 +2,7 @@
 #pragma once
 
 #include "mlir/Pass/Pass.h"
+#include "mlir/IR/BuiltinOps.h"
 
 #include <memory>
 
@@ -15,6 +16,6 @@ namespace mlir::llaccel {
 
 /// Write qgraph.json + qweights.bin (docs/DIALECT.md section 2) for the
 /// quantized (+fused) high-level module into `dir`.
-LogicalResult dumpQGraph(ModuleOp module, llvm::StringRef dir);
+LogicalResult dumpQGraph(ModuleOp module, llvm::StringRef dir, int64_t prefillM = 16);
 
 } // namespace mlir::llaccel

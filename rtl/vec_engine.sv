@@ -1,41 +1,20 @@
-// vec_engine.sv — 16-lane i16 vector engine (docs/ARCH.md, docs/NUMERICS.md).
-//
-// Ops: VEC_RMSNORM, VEC_ROPE, VEC_SILU, VEC_MUL, VEC_ADD, VEC_QUANT.
-//
-// Structure
-//   * Every instruction is a sequence of "steps"; a step reads at most one
-//     32-B (16-B for D=16 RoPE) vector on rd0, one on rd1, and writes at most
-//     one vector. Three identical step walkers (vec_engine_walker) enumerate
-//     the same sequence: one drives rd0 requests, one drives rd1 requests, one
-//     drives the compute/write stage. The request walkers run ahead of the
-//     compute walker, bounded by the depth of a per-port response FIFO
-//     (credit = FIFO free slots minus the one response in flight), so the
-//     engine sustains one vector per cycle when the SRAM grants and stays
-//     correct under arbitrary grant delays on any port.
-//   * The compute stage pops the FIFO heads it needs, computes 16 lanes in one
-//     cycle and loads the write holding register, which presents the write
-//     request until granted. Ordering therefore is read → compute → write with
-//     the write lagging the read of the same vector by ≥ 2 cycles, so in-place
-//     operation (dst == src) is safe for every op.
-//   * RMSNorm: pass 0 accumulates the 48-bit sum of squares of the row; the
-//     isqrt (24 cycles) and udiv (32 cycles) run while the request walkers
-//     prefetch the pass-1 operands; pass 1 scales and writes the row.
-//     Rows are processed sequentially (no cross-row pipelining).
-//   * RoPE step triple per (m, h, i-group): sub 0 reads x1 (rd0) and cos
-//     (rd1); sub 1 reads x2 and sin, computes y1 and y2, writes y1; sub 2
-//     writes y2.
-//   * SiLU: the 257-entry sigmoid LUT is a localparam array looked up twice per
-//     lane (idx, idx+1) — a combinational ROM per lane.
-//
-// All arithmetic goes through the llaccel_pkg helpers so it is identical to
-// include/llaccel/numerics.h.
+// 16-lane i16 vector engine; see docs/ARCH.md and docs/NUMERICS.md.
+// three walkers drive rd0, rd1 and compute/write steps. response FIFO credits
+// include in-flight reads; writes remain held until granted.
+// read -> compute -> write ordering keeps in-place operations safe.
+// 32-B accesses crossing a 256-B SRAM line split into two 16-B pieces.
+// RMSNorm uses a 48-bit sum, isqrt/udiv, then a scaling pass per row.
+// RoPE reads x1/cos, then x2/sin, and writes both halves in three substeps.
+// SiLU interpolates two sigmoid LUT entries per lane.
 
 /* verilator lint_off DECLFILENAME */  // private helper modules live in the engine's file
 
 // ---------------------------------------------------------------------------------------
-// Step walker. ROLE 0 = rd0 address, 1 = rd1 address, 2 = write address.
+// step walker. ROLE 0 = rd0 address, 1 = rd1 address, 2 = write address.
 // ---------------------------------------------------------------------------------------
-module vec_engine_walker #(
+module vec_engine_walker
+  import llaccel_pkg::*;
+#(
   parameter int ROLE = 0
 ) (
   input  logic        clk,
@@ -48,7 +27,7 @@ module vec_engine_walker #(
   input  logic [7:0]  op,
   input  logic [7:0]  M,
   input  logic [7:0]  H,
-  input  logic [6:0]  D,
+  input  logic [8:0]  D,
   input  logic [15:0] K16,           // K / 16 (RMSNorm)
   input  logic [15:0] nsteps,        // count / 16 (flat ops)
   input  logic        advance,       // consume the current step
@@ -59,10 +38,8 @@ module vec_engine_walker #(
   output logic [1:0]  sub,           // sub-step (RMSNorm: pass; RoPE: 0/1/2)
   output logic        j_last,        // last group of the current row/pass (RMSNorm pass boundary)
   output logic [23:0] addr,          // address for this ROLE
-  output llaccel_pkg::sram_size_e size
+  output sram_size_e  size
 );
-  import llaccel_pkg::*;
-
   logic [7:0]  cm, ch;
   logic [15:0] cj;
   logic [1:0]  sub_r;
@@ -80,13 +57,16 @@ module vec_engine_walker #(
   assign is_quant = (op == 8'(OP_VEC_QUANT));
 
   always_comb begin
+    // RoPE uses 1/1/2/4/8 groups per half for D=16/32/64/128/256.
+    // the three substeps save x1/cos, compute both halves, then write y2;
+    // all FIFOs and lane registers retain the same fixed 16-lane width.
     // per-op loop bounds and offsets
     if (is_flat)      jmax = nsteps - 16'd1;
     else if (is_norm) jmax = K16 - 16'd1;
-    else              jmax = (D == 7'd64) ? 16'd1 : 16'd0;   // RoPE: groups of 16 lanes per half
+    else              jmax = (D == 9'd16) ? 16'd0 : (16'(D) >> 5) - 16'd1; // ceil((D/2)/16)-1
     j_last = (cj == jmax);
-    hoff = 24'(ch * D) << 1;                                   // 2 * ch * D bytes
-    joff = (cj != 16'd0) ? 24'd32 : 24'd0;                     // second 16-lane group (D = 64 only)
+    hoff = (24'(ch) * 24'(D)) << 1;                                   // 2 * ch * D bytes
+    joff = {3'd0, cj, 5'd0};                                 // 32 bytes per 16-lane half-group
     half = 24'(D);                                            // D/2 elements * 2 bytes
 
     en_rd0 = 1'b0; en_rd1 = 1'b0; en_wr = 1'b0; last = 1'b0; addr = '0; size = SZ_32;
@@ -112,7 +92,7 @@ module vec_engine_walker #(
       en_rd1 = (sub_r != 2'd2);
       en_wr  = (sub_r != 2'd0);
       last   = (sub_r == 2'd2) && j_last && (ch == H - 8'd1) && (cm == M - 8'd1);
-      size   = (D == 7'd16) ? SZ_16 : SZ_32;
+      size   = (D == 9'd16) ? SZ_16 : SZ_32;
       if (ROLE == 1)      addr = rowbase + joff + ((sub_r == 2'd1) ? half : 24'd0);
       else if (ROLE == 0) addr = rowbase + hoff + joff + ((sub_r == 2'd1) ? half : 24'd0);
       else                addr = rowbase + hoff + joff + ((sub_r == 2'd2) ? half : 24'd0);
@@ -171,6 +151,55 @@ module vec_engine_walker #(
 endmodule
 
 // ---------------------------------------------------------------------------------------
+// read-port line splitter. A 32-B step at the last 16-B slot of a 256-B line is
+// issued as two 16-B pieces (addr, addr + 16); the walker advances only when the
+// last piece is granted, and the two response halves are merged into one 256-bit
+// FIFO entry. Responses return exactly one cycle after the grant, so a
+// registered copy of the granted piece's role tags the arriving data.
+// ---------------------------------------------------------------------------------------
+module vec_engine_rdsplit
+  import llaccel_pkg::*;
+(
+  input  logic         clk,
+  input  logic         rst_n,
+  input  logic         clear,        // new instruction: no request is in flight
+  input  logic         req,          // the current step wants a read (active/credit already applied)
+  input  logic [23:0]  addr,         // step address, 16-B aligned
+  input  sram_size_e   size,         // SZ_16 or SZ_32
+  output logic         step_grant,   // the whole step has been granted this cycle
+  output logic         port_valid,
+  output sram_req_t    port_req,
+  input  logic         port_grant,
+  input  logic         port_rvalid,
+  input  logic [255:0] port_rdata,   // low 32 B of the port's right-aligned response
+  output logic         push,         // one complete step response is available on din
+  output logic [255:0] din
+);
+  logic         split, ph, last, rsp_first, rsp_second;
+  logic [127:0] hold;
+
+  assign split      = (size == SZ_32) && (addr[7:4] == 4'hF);
+  assign last       = !split || ph;
+  assign port_valid = req;
+  assign port_req   = '{addr: split ? addr + (ph ? 24'd16 : 24'd0) : addr, size: split ? SZ_16 : size};
+  assign step_grant = req && port_grant && last;
+  assign push       = port_rvalid && !rsp_first;
+  assign din        = rsp_second ? {port_rdata[127:0], hold} : port_rdata;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      ph <= 1'b0; rsp_first <= 1'b0; rsp_second <= 1'b0; hold <= '0;
+    end else begin
+      rsp_first  <= req && port_grant && split && !ph;
+      rsp_second <= req && port_grant && split && ph;
+      if (clear)                  ph <= 1'b0;
+      else if (req && port_grant) ph <= split && !ph;
+      if (port_rvalid && rsp_first) hold <= port_rdata[127:0];
+    end
+  end
+endmodule
+
+// ---------------------------------------------------------------------------------------
 // Small response FIFO (registered storage, combinational head).
 // ---------------------------------------------------------------------------------------
 module vec_engine_fifo #(
@@ -212,43 +241,39 @@ module vec_engine_fifo #(
 endmodule
 
 // ---------------------------------------------------------------------------------------
-// Vector engine
+// vector engine
 // ---------------------------------------------------------------------------------------
-module vec_engine (
-  input  logic                    clk,
-  input  logic                    rst_n,
-  input  logic                    instr_valid,
-  input  llaccel_pkg::instr_words_t instr,
-  output logic                    instr_ready,
-  input  logic [31:0]             pos,
-  output logic                    busy,
-  output logic                    done_pulse,
-  output logic [7:0]              done_sig_sem,
-  output logic                    vec_rd0_valid,
-  output llaccel_pkg::sram_req_t  vec_rd0_req,
-  input  logic                    vec_rd0_grant,
-  input  logic                    vec_rd0_rvalid,
-  input  logic [511:0]            vec_rd0_rdata,
-  output logic                    vec_rd1_valid,
-  output llaccel_pkg::sram_req_t  vec_rd1_req,
-  input  logic                    vec_rd1_grant,
-  input  logic                    vec_rd1_rvalid,
-  input  logic [511:0]            vec_rd1_rdata,
-  output logic                    vec_wr_valid,
-  output llaccel_pkg::sram_req_t  vec_wr_req,
-  output logic [511:0]            vec_wr_wdata,
-  output logic [63:0]             vec_wr_wstrb,
-  input  logic                    vec_wr_grant,
-  output logic                    perf_busy,
-  output logic                    perf_sram_stall
-);
+module vec_engine
   import llaccel_pkg::*;
-
-  // The generated LUT file also defines the attention exp tables, unused here.
-  /* verilator lint_off UNUSEDPARAM */
-  `include "llaccel_luts.svh"
-  /* verilator lint_on UNUSEDPARAM */
-
+  import llaccel_luts_pkg::*;
+(
+  input  logic         clk,
+  input  logic         rst_n,
+  input  logic         instr_valid,
+  input  instr_words_t instr,
+  output logic         instr_ready,
+  input  logic [31:0]  pos,
+  output logic         busy,
+  output logic         done_pulse,
+  output logic [7:0]   done_sig_sem,
+  output logic         vec_rd0_valid,
+  output sram_req_t    vec_rd0_req,
+  input  logic         vec_rd0_grant,
+  input  logic         vec_rd0_rvalid,
+  input  logic [511:0] vec_rd0_rdata,
+  output logic         vec_rd1_valid,
+  output sram_req_t    vec_rd1_req,
+  input  logic         vec_rd1_grant,
+  input  logic         vec_rd1_rvalid,
+  input  logic [511:0] vec_rd1_rdata,
+  output logic         vec_wr_valid,
+  output sram_req_t    vec_wr_req,
+  output logic [511:0] vec_wr_wdata,
+  output logic [63:0]  vec_wr_wstrb,
+  input  logic         vec_wr_grant,
+  output logic         perf_busy,
+  output logic         perf_sram_stall
+);
   localparam int LANES = VEC_LANES;   // 16
   localparam int FIFO_DEPTH = 4;
 
@@ -295,7 +320,7 @@ module vec_engine (
   logic [7:0]  op_r, sig_r;
   logic [31:0] p0_r, p1_r, p2_r;           // op-specific scalar params (see decode)
   logic [7:0]  M_r, H_r;
-  logic [6:0]  D_r;
+  logic [8:0]  D_r;
   logic [15:0] K16_r, nsteps_r;
   logic        is_norm, is_rope, is_silu, is_mul, is_add, is_quant;
 
@@ -313,7 +338,7 @@ module vec_engine (
   logic [23:0] d_base0, d_base1, d_basew, d_stride0, d_stride1, d_stridew;
   logic        d_empty;
   logic [7:0]  d_M, d_H;
-  logic [6:0]  d_D;
+  logic [8:0]  d_D;
   logic [15:0] d_K16, d_nsteps;
   logic [31:0] d_tab_row0;
 
@@ -325,7 +350,7 @@ module vec_engine (
   assign d_two_src = (d_op == 8'(OP_VEC_MUL)) || (d_op == 8'(OP_VEC_ADD));
 
   always_comb begin
-    d_M = 8'd0; d_H = 8'd0; d_D = 7'd0; d_K16 = 16'd0; d_nsteps = 16'd0;
+    d_M = 8'd0; d_H = 8'd0; d_D = 9'd0; d_K16 = 16'd0; d_nsteps = 16'd0;
     d_base0 = w2[23:0]; d_base1 = w3[23:0]; d_basew = w3[23:0];
     d_stride0 = '0; d_stride1 = '0; d_stridew = '0;
     d_tab_row0 = w7 + pos * w8;                            // table + POS * table_stride
@@ -340,11 +365,11 @@ module vec_engine (
     end else if (d_rope) begin
       d_M       = w4[7:0];
       d_H       = w5[7:0];
-      d_D       = w6[6:0];
+      d_D       = w6[8:0];
       d_base1   = d_tab_row0[23:0];
       d_stride1 = w8[23:0];
-      d_stride0 = 24'(w5[7:0] * w6[6:0]) << 1;             // 2*H*D bytes per row
-      d_stridew = 24'(w5[7:0] * w6[6:0]) << 1;
+      d_stride0 = (24'(w5[7:0]) * 24'(w6[8:0])) << 1;             // 2*H*D bytes per row
+      d_stridew = (24'(w5[7:0]) * 24'(w6[8:0])) << 1;
       d_empty   = (w4[7:0] == 8'd0) || (w5[7:0] == 8'd0);
     end else begin
       d_basew   = d_two_src ? w4[23:0] : w3[23:0];
@@ -390,31 +415,40 @@ module vec_engine (
     .addr(wc_addr), .size(wc_size));
   /* verilator lint_on PINCONNECTEMPTY */
 
-  // ---- response FIFOs and read issue ----------------------------------------------------------
-  logic [255:0] f0_dout, f1_dout;
-  logic f0_empty, f1_empty, f0_pop, f1_pop;
+  // ---- response FIFOs, line splitters and read issue -----------------------------------------
+  logic [255:0] f0_dout, f1_dout, f0_din, f1_din;
+  logic f0_empty, f1_empty, f0_pop, f1_pop, f0_push, f1_push;
   logic [2:0] f0_count, f1_count;
-  logic credit0, credit1;
+  logic credit0, credit1, rd0_req, rd1_req, rd0_step, rd1_step;
 
   vec_engine_fifo #(.W(256), .DEPTH(FIFO_DEPTH)) u_f0 (
-    .clk(clk), .rst_n(rst_n), .flush(accept), .push(vec_rd0_rvalid), .din(vec_rd0_rdata[255:0]),
+    .clk(clk), .rst_n(rst_n), .flush(accept), .push(f0_push), .din(f0_din),
     .pop(f0_pop), .dout(f0_dout), .empty(f0_empty), .count(f0_count));
   vec_engine_fifo #(.W(256), .DEPTH(FIFO_DEPTH)) u_f1 (
-    .clk(clk), .rst_n(rst_n), .flush(accept), .push(vec_rd1_rvalid), .din(vec_rd1_rdata[255:0]),
+    .clk(clk), .rst_n(rst_n), .flush(accept), .push(f1_push), .din(f1_din),
     .pop(f1_pop), .dout(f1_dout), .empty(f1_empty), .count(f1_count));
 
   // A granted read returns next cycle, so the only response in flight is the
-  // one whose rvalid is high now (not yet counted by the FIFO).
+  // one whose rvalid is high now (not yet counted by the FIFO). Counting the
+  // first half of a split step as a pending push is conservative. A request
+  // that is presented and not granted keeps its credit (the count can only
+  // grow through an rvalid, which needs a grant), so it is held as required.
   assign credit0 = (4'(f0_count) + 4'(vec_rd0_rvalid)) < 4'(FIFO_DEPTH);
   assign credit1 = (4'(f1_count) + 4'(vec_rd1_rvalid)) < 4'(FIFO_DEPTH);
 
-  assign vec_rd0_valid = (state == S_RUN) && w0_active && w0_en_rd0 && credit0;
-  assign vec_rd0_req   = '{addr: w0_addr, size: w0_size};
-  assign w0_adv        = (state == S_RUN) && w0_active && (!w0_en_rd0 || (credit0 && vec_rd0_grant));
+  assign rd0_req = (state == S_RUN) && w0_active && w0_en_rd0 && credit0;
+  assign rd1_req = (state == S_RUN) && w1_active && w1_en_rd1 && credit1;
+  assign w0_adv  = (state == S_RUN) && w0_active && (!w0_en_rd0 || rd0_step);
+  assign w1_adv  = (state == S_RUN) && w1_active && (!w1_en_rd1 || rd1_step);
 
-  assign vec_rd1_valid = (state == S_RUN) && w1_active && w1_en_rd1 && credit1;
-  assign vec_rd1_req   = '{addr: w1_addr, size: w1_size};
-  assign w1_adv        = (state == S_RUN) && w1_active && (!w1_en_rd1 || (credit1 && vec_rd1_grant));
+  vec_engine_rdsplit u_s0 (
+    .clk(clk), .rst_n(rst_n), .clear(accept), .req(rd0_req), .addr(w0_addr), .size(w0_size), .step_grant(rd0_step),
+    .port_valid(vec_rd0_valid), .port_req(vec_rd0_req), .port_grant(vec_rd0_grant),
+    .port_rvalid(vec_rd0_rvalid), .port_rdata(vec_rd0_rdata[255:0]), .push(f0_push), .din(f0_din));
+  vec_engine_rdsplit u_s1 (
+    .clk(clk), .rst_n(rst_n), .clear(accept), .req(rd1_req), .addr(w1_addr), .size(w1_size), .step_grant(rd1_step),
+    .port_valid(vec_rd1_valid), .port_req(vec_rd1_req), .port_grant(vec_rd1_grant),
+    .port_rvalid(vec_rd1_rvalid), .port_rdata(vec_rd1_rdata[255:0]), .push(f1_push), .din(f1_din));
 
   // ---- RMSNorm scalar path ------------------------------------------------------------------------
   typedef enum logic [2:0] { N_IDLE, N_SQRT_START, N_SQRT_WAIT, N_DIV_START, N_DIV_WAIT, N_READY } norm_e;
@@ -438,18 +472,31 @@ module vec_engine (
   udiv #(.AW(32), .BW(24)) u_udiv (.clk(clk), .rst_n(rst_n), .start(udiv_start), .a(p1_r), .b(udiv_b),
                                    .busy(udiv_busy), .done(udiv_done), .q(udiv_q));
 
-  // ---- compute stage --------------------------------------------------------------------------------
+  // ---- write holding register and line splitter ---------------------------------------------------
   logic        wr_valid_r;
   logic [23:0] wr_addr_r;
   sram_size_e  wr_size_r;
   logic [255:0] wr_data_r;
+  logic        wr_cross, wr_ph, wr_last, wr_done;
+
+  assign wr_cross = (wr_size_r == SZ_32) && (wr_addr_r[7:4] == 4'hF);
+  assign wr_last  = !wr_cross || wr_ph;
+  assign wr_done  = vec_wr_grant && wr_last;                   // the holding register frees this cycle
+
+  assign vec_wr_valid = wr_valid_r;
+  assign vec_wr_req   = '{addr: wr_cross ? wr_addr_r + (wr_ph ? 24'd16 : 24'd0) : wr_addr_r,
+                          size: wr_cross ? SZ_16 : wr_size_r};
+  assign vec_wr_wdata = (wr_cross && wr_ph) ? {384'd0, wr_data_r[255:128]} : {256'd0, wr_data_r};
+  assign vec_wr_wstrb = (vec_wr_req.size == SZ_16) ? 64'h0000_0000_0000_FFFF : 64'h0000_0000_FFFF_FFFF;
+
+  // ---- compute stage --------------------------------------------------------------------------------
   logic [255:0] x1_r, c_r, y2_r;   // RoPE: saved x1 / cos from sub 0, y2 from sub 1
 
   logic need0, need1, norm_ok, wr_ok, do_step;
   assign need0   = wc_en_rd0;
   assign need1   = wc_en_rd1;
   assign norm_ok = !(is_norm && wc_sub[0]) || (norm_state == N_READY);
-  assign wr_ok   = !wc_en_wr || !wr_valid_r || vec_wr_grant;
+  assign wr_ok   = !wc_en_wr || !wr_valid_r || wr_done;
   assign do_step = (state == S_RUN) && wc_active && (!need0 || !f0_empty) && (!need1 || !f1_empty) && wr_ok && norm_ok;
   assign f0_pop  = do_step && need0;
   assign f1_pop  = do_step && need1;
@@ -511,7 +558,7 @@ module vec_engine (
       op_r <= '0; sig_r <= '0; p0_r <= '0; p1_r <= '0; p2_r <= '0;
       M_r <= '0; H_r <= '0; D_r <= '0; K16_r <= '0; nsteps_r <= '0;
       norm_state <= N_IDLE; ss <= '0; r_r <= '0; inv_r <= '0;
-      wr_valid_r <= 1'b0; wr_addr_r <= '0; wr_size_r <= SZ_32; wr_data_r <= '0;
+      wr_valid_r <= 1'b0; wr_addr_r <= '0; wr_size_r <= SZ_32; wr_data_r <= '0; wr_ph <= 1'b0;
       x1_r <= '0; c_r <= '0; y2_r <= '0;
     end else begin
 `ifndef SYNTHESIS
@@ -520,8 +567,9 @@ module vec_engine (
         assert (d_op == 8'(OP_VEC_RMSNORM) || d_op == 8'(OP_VEC_ROPE) || d_op == 8'(OP_VEC_SILU) ||
                 d_op == 8'(OP_VEC_MUL) || d_op == 8'(OP_VEC_ADD) || d_op == 8'(OP_VEC_QUANT))
           else $error("vec_engine: unsupported opcode %h", d_op);
-        if (d_rope) assert (w6[6:0] == 7'd16 || w6[6:0] == 7'd32 || w6[6:0] == 7'd64)
-          else $error("vec_engine: RoPE D must be 16/32/64 (got %0d)", w6);
+        if (d_rope) assert (w6 == 32'd16 || w6 == 32'd32 || w6 == 32'd64 ||
+                            w6 == 32'd128 || w6 == 32'd256)
+          else $error("vec_engine: RoPE D must be 16/32/64/128/256 (got %0d)", w6);
         if (d_norm) assert (w6[3:0] == 4'd0) else $error("vec_engine: RMSNorm K must be a multiple of 16");
         if (!d_norm && !d_rope) assert ((d_two_src ? w5[3:0] : w4[3:0]) == 4'd0)
           else $error("vec_engine: count must be a multiple of 16");
@@ -552,18 +600,21 @@ module vec_engine (
             norm_state <= N_IDLE;
             ss         <= '0;
             wr_valid_r <= 1'b0;
+            wr_ph      <= 1'b0;
           end
         end
         S_RUN: begin
-          // write holding register
+          // write holding register (a split write frees only when its second piece is granted)
+          if (vec_wr_grant && wr_cross && !wr_ph) wr_ph <= 1'b1;
           if (do_step && wc_en_wr) begin
             wr_valid_r <= 1'b1;
             wr_addr_r  <= wc_addr;
             wr_size_r  <= wc_size;
+            wr_ph      <= 1'b0;
             if (is_quant)                   wr_data_r <= {128'd0, q_vec};
             else if (is_rope && wc_sub == 2'd2) wr_data_r <= y2_r;
             else                            wr_data_r <= y_vec;
-          end else if (vec_wr_grant) begin
+          end else if (wr_done) begin
             wr_valid_r <= 1'b0;
           end
           // RoPE saved operands
@@ -598,12 +649,6 @@ module vec_engine (
       endcase
     end
   end
-
-  // ---- write port -------------------------------------------------------------------------------------
-  assign vec_wr_valid = wr_valid_r;
-  assign vec_wr_req   = '{addr: wr_addr_r, size: wr_size_r};
-  assign vec_wr_wdata = {256'd0, wr_data_r};
-  assign vec_wr_wstrb = (wr_size_r == SZ_16) ? 64'h0000_0000_0000_FFFF : 64'h0000_0000_FFFF_FFFF;
 
   assign perf_sram_stall = (vec_rd0_valid && !vec_rd0_grant) || (vec_rd1_valid && !vec_rd1_grant) ||
                            (vec_wr_valid && !vec_wr_grant);

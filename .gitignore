@@ -5,5 +5,14 @@ __pycache__/
 obj_dir/
 *.vcd
 *.fst
-data/
+/data/
 checkpoints/
+
+# generated experiment data and temporary files
+work/
+
+# local settings
+.DS_Store
+.env
+.env.*
+!.env.example

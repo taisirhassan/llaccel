@@ -33,8 +33,12 @@ module sync_fifo #(
     if (do_push) mem[wp] <= wdata;
   end
 
-  always_ff @(posedge clk) begin
-    if (!rst_n || clr) begin
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      wp    <= '0;
+      rp    <= '0;
+      count <= '0;
+    end else if (clr) begin
       wp    <= '0;
       rp    <= '0;
       count <= '0;

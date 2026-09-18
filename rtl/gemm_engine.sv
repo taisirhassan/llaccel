@@ -14,6 +14,12 @@
 // row reads. The drain tail (epilogue pipeline + write FIFO) overlaps the next
 // nt's streaming. Every arithmetic step follows docs/NUMERICS.md exactly
 // (helpers from llaccel_pkg; SIGMOID_LUT from llaccel_luts_pkg).
+//
+// SRAM line rule: the ISA guarantees only 16-B alignment for rq / bias / out /
+// aux, and a crossbar request must not cross a 256-B line. A 64-B rq/bias read
+// that would cross is issued as four 16-B reads, a 32-B aux read or i16 output
+// write as two 16-B pieces; the pieces are re-assembled so the pipeline never
+// sees the split. 64-B-aligned rq/bias and 32-B-aligned out/aux never split.
 module gemm_engine
   import llaccel_pkg::*;
 #(
@@ -53,7 +59,12 @@ module gemm_engine
   output logic [1:0]    perf_sram_stall
 );
   typedef enum logic [2:0] { S_IDLE, S_SETUP, S_RUN, S_RQ, S_WAIT, S_DRAIN, S_FINISH, S_DONE } state_e;
-  typedef enum logic [2:0] { T_NONE, T_AROW, T_RQ_LO, T_RQ_HI, T_BIAS, T_AUX } tag_e;
+  typedef enum logic [2:0] { T_NONE, T_AROW, T_RQ, T_BIAS, T_AUX_LO, T_AUX } tag_e;
+
+  localparam int unsigned TN = GEMM_TN;    // output channels per tile (adder trees)
+  localparam int unsigned TK = GEMM_TK;    // reduction depth per tile (multipliers per tree)
+  localparam int unsigned TM = GEMM_TM;    // accumulator rows
+  localparam int unsigned MW = $clog2(TM); // row index width (4)
 
   state_e state;
 
@@ -84,32 +95,43 @@ module gemm_engine
   logic        wbuf_ready, st_last_row, st_last_kt;
 
   // ---- gemm_a response tag -------------------------------------------------------------------
-  tag_e        a_tag;
-  logic [4:0]  a_tag_m;
-  logic        a_tag_par;
-  logic        a_row_rvalid;
+  tag_e          a_tag;
+  logic [MW-1:0] a_tag_m;
+  logic          a_tag_par;
+  logic [2:0]    a_tag_p;          // rq/bias: first 16-B piece index of the response
+  logic          a_tag_n4;         // rq/bias: response carries four 16-B pieces (one 64-B read)
+  logic          a_tag_cross;      // aux: response is the second half of a split read
+  logic          a_row_rvalid;
 
-  // ---- rq / bias -----------------------------------------------------------------------------------
-  logic [1:0]  rq_step;
-  logic [1:0]  rq_pending;
+  // ---- rq / bias fetch -------------------------------------------------------------------------
+  logic        fq_kind;            // 0 = rq region (128 B), 1 = bias region (64 B)
+  logic [6:0]  fq_off;             // byte offset inside the region (16-B granular)
+  logic [23:0] fq_addr;
+  logic        fq_cross, fq_last;
+  logic [6:0]  fq_off_next;
+  logic [3:0]  rq_pending;
   logic [23:0] rq_ptr, bias_ptr;
-  logic [31:0] rq_m   [16];
-  logic [5:0]  rq_s   [16];
-  logic [31:0] bias_v [16];
+  logic [31:0] rq_m   [TN];
+  logic [5:0]  rq_s   [TN];
+  logic [31:0] bias_v [TN];
 
   // ---- MAC pipeline ---------------------------------------------------------------------------------
   logic               p_valid, s_valid;
-  logic [4:0]         p_m, s_m;
-  logic signed [15:0] prod [16][16];
-  logic signed [19:0] psum [16];
-  logic signed [31:0] acc  [16][16];
+  logic [MW-1:0]      p_m, s_m;
+  logic signed [15:0] prod [TN][TK];
+  logic signed [19:0] psum [TN];
+  logic signed [31:0] acc  [TM][TN];
 
   // ---- epilogue pipeline -----------------------------------------------------------------------------
   logic        adv;
   logic        d0_fire, d1_v, d2_v, d3_v, d4_v;
   logic [4:0]  dr_m;
+  logic [MW-1:0] dr_idx;
   logic [23:0] out_ptr, aux_ptr, out_nt_base, aux_nt_base;
-  logic signed [31:0] d1_val [16];
+  logic        aux_cross, aux_ph;  // aux read split over two 16-B pieces; current piece
+  logic [127:0] aux_hold;          // first half of a split aux read
+  logic [255:0] aux_full;          // complete aux row arriving this cycle
+  logic signed [32:0] d1_val [16];  // acc + bias: |acc| <= 2^30 plus an i32 bias needs 33 bits
   logic [23:0]        d1_addr, d2_addr, d3_addr, d4_addr;
   logic signed [63:0] d2_p   [16];
   logic [255:0]       aux_d1;
@@ -131,6 +153,9 @@ module gemm_engine
   logic             out_push, out_pop, out_full, out_empty;
   logic [OUT_W-1:0] out_in, out_out;
   logic [1:0]       out_count;
+  logic [23:0]      wr_addr;
+  logic [255:0]     wr_data;
+  logic             wr_cross, wr_ph;
 
   // ======================================================================================
   // Weight tile loader: loads tiles in linear (nt, kt) order into alternating halves.
@@ -147,6 +172,18 @@ module gemm_engine
   assign st_last_row = (st_m == m_rows - 5'd1);
   assign st_last_kt  = (st_kt == kt_cnt - 12'd1);
 
+  // rq / bias piece under fetch: a 64-B read unless it would cross the 256-B line
+  assign fq_addr     = (fq_kind ? bias_ptr : rq_ptr) + {17'd0, fq_off};
+  // A short line-boundary piece can leave less than 64 bytes in the region.
+  // Do not overshoot its end: rq uses a wrapping 7-bit 128-byte counter.
+  assign fq_cross    = (fq_addr[7:4] > 4'd12) ||
+                       (fq_kind ? (fq_off != 7'd0) : (fq_off > 7'd64));
+  assign fq_off_next = fq_off + (fq_cross ? 7'd16 : 7'd64);
+  assign fq_last     = fq_kind ? (fq_off_next[6] == 1'b1) : (fq_off_next == 7'd0);   // 64 (bias) / 128 (rq, wraps)
+
+  // aux row: a 32-B read unless it starts in the last 16-B slot of the line
+  assign aux_cross   = (aux_ptr[7:4] == 4'hF);
+
   always_comb begin
     gemm_a_valid    = 1'b0;
     gemm_a_req.addr = a_addr;
@@ -159,19 +196,24 @@ module gemm_engine
       end
       S_RQ: begin
         gemm_a_valid    = !d1_v && !d2_v && !d3_v && !d4_v;   // previous nt's drain no longer needs rq regs
-        gemm_a_req.addr = (rq_step == 2'd0) ? rq_ptr : (rq_step == 2'd1) ? rq_ptr + 24'd64 : bias_ptr;
-        gemm_a_req.size = SZ_64;
+        gemm_a_req.addr = fq_addr;
+        gemm_a_req.size = fq_cross ? SZ_16 : SZ_64;
       end
       S_DRAIN: begin
-        gemm_a_valid    = need_aux && adv;
-        gemm_a_req.addr = aux_ptr;
-        gemm_a_req.size = SZ_32;
+        // Reserve an output slot before presenting AUX. Otherwise an older
+        // epilogue can fill the FIFO while this read is denied, dropping valid
+        // (or losing the response if it is granted during a pipeline stall).
+        gemm_a_valid    = need_aux && adv &&
+                         (4'(out_count) + 4'(d1_v) + 4'(d2_v) + 4'(d3_v) + 4'(d4_v) < 4'd2);
+        gemm_a_req.addr = aux_ptr + (aux_ph ? 24'd16 : 24'd0);
+        gemm_a_req.size = aux_cross ? SZ_16 : SZ_32;
       end
       default: ;
     endcase
   end
 
   assign a_row_rvalid = gemm_a_rvalid && (a_tag == T_AROW);
+  assign aux_full     = a_tag_cross ? {gemm_a_rdata[127:0], aux_hold} : gemm_a_rdata[255:0];
 
   // ======================================================================================
   // Main control
@@ -181,9 +223,10 @@ module gemm_engine
   assign done_pulse   = (state == S_DONE);
   assign done_sig_sem = sig;
   assign adv          = !out_full;
-  assign d0_fire      = (state == S_DRAIN) && adv && (!need_aux || gemm_a_grant);
+  assign d0_fire      = (state == S_DRAIN) && adv && (!need_aux || (gemm_a_grant && (!aux_cross || aux_ph)));
+  assign dr_idx       = dr_m[MW-1:0];
 
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state <= S_IDLE;
       a_base <= '0; w_base <= '0; out_base <= '0; rq_base <= '0; bias_base <= '0; aux_base <= '0;
@@ -194,9 +237,12 @@ module gemm_engine
       ld_active <= 1'b0; ld_inflight <= 1'b0; ld_par <= 1'b0; ld_nt <= '0; ld_kt <= '0; w_ptr <= '0;
       wbuf_valid[0] <= 1'b0; wbuf_valid[1] <= 1'b0;
       st_nt <= '0; st_kt <= '0; st_m <= '0; st_par <= 1'b0; a_addr <= '0; a_kt_base <= '0;
-      a_tag <= T_NONE; a_tag_m <= '0; a_tag_par <= 1'b0;
-      rq_step <= '0; rq_pending <= '0; rq_ptr <= '0; bias_ptr <= '0;
-      dr_m <= '0; out_ptr <= '0; aux_ptr <= '0; out_nt_base <= '0; aux_nt_base <= '0;
+      a_tag <= T_NONE; a_tag_m <= '0; a_tag_par <= 1'b0; a_tag_p <= '0; a_tag_n4 <= 1'b0; a_tag_cross <= 1'b0;
+      fq_kind <= 1'b0; fq_off <= '0; rq_pending <= '0; rq_ptr <= '0; bias_ptr <= '0;
+      dr_m <= '0; out_ptr <= '0; aux_ptr <= '0; out_nt_base <= '0; aux_nt_base <= '0; aux_ph <= 1'b0;
+      for (int unsigned i = 0; i < TN; i++) begin
+        rq_m[i] <= '0; rq_s[i] <= '0; bias_v[i] <= '0;
+      end
     end else begin
       // ---- tile loader (independent of the main FSM) ----
       if (gemm_w_valid && gemm_w_grant) ld_inflight <= 1'b1;
@@ -214,37 +260,47 @@ module gemm_engine
         end
       end
 
-      // ---- gemm_a response tag ----
+      // ---- gemm_a response tag (reads return exactly one cycle after the grant) ----
       if (gemm_a_valid && gemm_a_grant) begin
-        a_tag_m   <= st_m;
-        a_tag_par <= st_par;
+        a_tag_m     <= st_m[MW-1:0];
+        a_tag_par   <= st_par;
+        a_tag_p     <= fq_off[6:4];
+        a_tag_n4    <= !fq_cross;
+        a_tag_cross <= aux_cross;
         case (state)
           S_RUN:   a_tag <= T_AROW;
-          S_RQ:    a_tag <= (rq_step == 2'd0) ? T_RQ_LO : (rq_step == 2'd1) ? T_RQ_HI : T_BIAS;
-          default: a_tag <= T_AUX;
+          S_RQ:    a_tag <= fq_kind ? T_BIAS : T_RQ;
+          default: a_tag <= (aux_cross && !aux_ph) ? T_AUX_LO : T_AUX;
         endcase
       end else begin
         a_tag <= T_NONE;
       end
 
-      // ---- rq / bias capture ----
+      // ---- rq / bias capture: piece c of the response is 16-B piece (a_tag_p + c) of the region ----
       if (gemm_a_rvalid) begin
-        case (a_tag)
-          T_RQ_LO: for (int unsigned i = 0; i < 8; i++) begin
-            rq_m[i] <= gemm_a_rdata[64*i +: 32];
-            rq_s[i] <= gemm_a_rdata[64*i + 32 +: 6];
+        for (int unsigned c = 0; c < 4; c++) begin
+          logic [2:0] piece;
+          piece = a_tag_p + 3'(c);
+          if (c == 0 || a_tag_n4) begin
+            if (a_tag == T_RQ) begin
+              // two channels per 16-B piece: {M lo, S lo, M hi, S hi}
+              rq_m[{piece, 1'b0}] <= gemm_a_rdata[128*c      +: 32];
+              rq_s[{piece, 1'b0}] <= gemm_a_rdata[128*c + 32 +: 6];
+              rq_m[{piece, 1'b1}] <= gemm_a_rdata[128*c + 64 +: 32];
+              rq_s[{piece, 1'b1}] <= gemm_a_rdata[128*c + 96 +: 6];
+            end
+            if (a_tag == T_BIAS) begin
+              // four channels per 16-B piece
+              for (int unsigned i = 0; i < 4; i++)
+                bias_v[{piece[1:0], 2'(i)}] <= gemm_a_rdata[128*c + 32*i +: 32];
+            end
           end
-          T_RQ_HI: for (int unsigned i = 0; i < 8; i++) begin
-            rq_m[i + 8] <= gemm_a_rdata[64*i +: 32];
-            rq_s[i + 8] <= gemm_a_rdata[64*i + 32 +: 6];
-          end
-          T_BIAS: for (int unsigned i = 0; i < 16; i++) bias_v[i] <= gemm_a_rdata[32*i +: 32];
-          default: ;
-        endcase
+        end
+        if (a_tag == T_AUX_LO) aux_hold <= gemm_a_rdata[127:0];
       end
-      case ({(state == S_RQ) && gemm_a_grant, gemm_a_rvalid && (a_tag == T_RQ_LO || a_tag == T_RQ_HI || a_tag == T_BIAS)})
-        2'b10:   rq_pending <= rq_pending + 2'd1;
-        2'b01:   rq_pending <= rq_pending - 2'd1;
+      case ({(state == S_RQ) && gemm_a_grant, gemm_a_rvalid && (a_tag == T_RQ || a_tag == T_BIAS)})
+        2'b10:   rq_pending <= rq_pending + 4'd1;
+        2'b01:   rq_pending <= rq_pending - 4'd1;
         default: ;
       endcase
 
@@ -285,7 +341,8 @@ module gemm_engine
           a_addr <= a_base; a_kt_base <= a_base;
           rq_ptr <= rq_base; bias_ptr <= bias_base; rq_pending <= '0;
           out_nt_base <= out_base; aux_nt_base <= aux_base;
-          for (int unsigned i = 0; i < 16; i++) bias_v[i] <= '0;
+          aux_ph <= 1'b0;
+          for (int unsigned i = 0; i < TN; i++) bias_v[i] <= '0;
           if (m_rows == 5'd0 || n_cols[15:4] == 12'd0 || k_len[15:4] == 12'd0) begin
             ld_active <= 1'b0;
             state     <= S_DONE;
@@ -307,7 +364,8 @@ module gemm_engine
                 st_kt     <= '0;
                 a_kt_base <= a_base;
                 a_addr    <= a_base;
-                rq_step   <= '0;
+                fq_kind   <= 1'b0;
+                fq_off    <= '0;
                 state     <= S_RQ;
               end else begin
                 st_kt     <= st_kt + 12'd1;
@@ -320,28 +378,28 @@ module gemm_engine
 
         S_RQ: begin
           if (gemm_a_grant) begin
-            case (rq_step)
-              2'd0: rq_step <= 2'd1;
-              2'd1: begin
-                if (has_bias) rq_step <= 2'd2;
-                else          state   <= S_WAIT;
-              end
-              default: state <= S_WAIT;
-            endcase
+            fq_off <= fq_off_next;
+            if (fq_last) begin
+              fq_off <= '0;
+              if (!fq_kind && has_bias) fq_kind <= 1'b1;
+              else                      state   <= S_WAIT;
+            end
           end
         end
 
         S_WAIT: begin
-          if (!p_valid && !s_valid && !a_row_rvalid && rq_pending == 2'd0 &&
-              !(gemm_a_rvalid && (a_tag == T_RQ_LO || a_tag == T_RQ_HI || a_tag == T_BIAS))) begin
+          if (!p_valid && !s_valid && !a_row_rvalid && rq_pending == 4'd0 &&
+              !(gemm_a_rvalid && (a_tag == T_RQ || a_tag == T_BIAS))) begin
             dr_m    <= '0;
             out_ptr <= out_nt_base;
             aux_ptr <= aux_nt_base;
+            aux_ph  <= 1'b0;
             state   <= S_DRAIN;
           end
         end
 
         S_DRAIN: begin
+          if (gemm_a_valid && gemm_a_grant) aux_ph <= aux_cross && !aux_ph;
           if (d0_fire) begin
             out_ptr <= out_ptr + out_stride;
             aux_ptr <= aux_ptr + aux_stride;
@@ -380,7 +438,7 @@ module gemm_engine
   // ======================================================================================
   // MAC pipeline: P (products) -> S (adder trees) -> ACC
   // ======================================================================================
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       p_valid <= 1'b0;
       s_valid <= 1'b0;
@@ -396,15 +454,15 @@ module gemm_engine
 
   always_ff @(posedge clk) begin
     if (a_row_rvalid) begin
-      for (int unsigned n = 0; n < 16; n++)
-        for (int unsigned k = 0; k < 16; k++)
-          prod[n][k] <= $signed(gemm_a_rdata[8*k +: 8]) * $signed(wbuf[a_tag_par][8*(16*n + k) +: 8]);
+      for (int unsigned n = 0; n < TN; n++)
+        for (int unsigned k = 0; k < TK; k++)
+          prod[n][k] <= 16'($signed(gemm_a_rdata[8*k +: 8])) * 16'($signed(wbuf[a_tag_par][8*(TK*n + k) +: 8]));
     end
     if (p_valid) begin
-      for (int unsigned n = 0; n < 16; n++) begin
+      for (int unsigned n = 0; n < TN; n++) begin
         logic signed [19:0] t;
         t = '0;
-        for (int unsigned k = 0; k < 16; k++) t = t + 20'(prod[n][k]);
+        for (int unsigned k = 0; k < TK; k++) t = t + 20'(prod[n][k]);
         psum[n] <= t;
       end
     end
@@ -413,11 +471,11 @@ module gemm_engine
   // accumulators: cleared in SETUP and as each row is drained; accumulated by the S stage
   always_ff @(posedge clk) begin
     if (state == S_SETUP) begin
-      for (int unsigned m = 0; m < 16; m++)
-        for (int unsigned n = 0; n < 16; n++) acc[m][n] <= '0;
+      for (int unsigned m = 0; m < TM; m++)
+        for (int unsigned n = 0; n < TN; n++) acc[m][n] <= '0;
     end else begin
-      if (d0_fire) for (int unsigned n = 0; n < 16; n++) acc[dr_m][n] <= '0;
-      if (s_valid) for (int unsigned n = 0; n < 16; n++) acc[s_m][n] <= acc[s_m][n] + 32'(psum[n]);
+      if (d0_fire) for (int unsigned n = 0; n < TN; n++) acc[dr_idx][n] <= '0;
+      if (s_valid) for (int unsigned n = 0; n < TN; n++) acc[s_m][n] <= acc[s_m][n] + 32'(psum[n]);
     end
   end
 
@@ -429,7 +487,7 @@ module gemm_engine
   // D2 -> D3 : t = sat16(rshr(p, S_n)), t8 = sat8(...)  (+ aux row)
   // D3 -> D4 : NONE/RESADD/MUL result, SILU step 1 (u)
   // D4 -> out: SILU step 2 (LUT + final multiply), pack, push
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       d1_v <= 1'b0; d2_v <= 1'b0; d3_v <= 1'b0; d4_v <= 1'b0;
     end else if (adv) begin
@@ -441,20 +499,20 @@ module gemm_engine
   end
 
   always_ff @(posedge clk) begin
-    if (gemm_a_rvalid && a_tag == T_AUX) aux_d1 <= gemm_a_rdata[255:0];
+    if (gemm_a_rvalid && a_tag == T_AUX) aux_d1 <= aux_full;
     if (adv) begin
       if (d0_fire) begin
-        for (int unsigned n = 0; n < 16; n++) d1_val[n] <= acc[dr_m][n] + $signed(bias_v[n]);
+        for (int unsigned n = 0; n < 16; n++)
+          d1_val[n] <= $signed({acc[dr_idx][n][31], acc[dr_idx][n]}) + $signed({bias_v[n][31], bias_v[n]});
         d1_addr <= out_ptr;
       end
       if (d1_v) begin
-        for (int unsigned n = 0; n < 16; n++) begin
-          logic signed [79:0] pp;
-          pp = $signed({{16{d1_val[n][31]}}, d1_val[n]}) * $signed({48'd0, rq_m[n]});
-          d2_p[n] <= pp[63:0];
-        end
+        // v * M_n with v 33-bit signed and M_n < 2^31: |product| < 2^63, so the
+        // low 64 bits of a 64-bit multiply are exact (same reasoning as mulshift64).
+        for (int unsigned n = 0; n < 16; n++)
+          d2_p[n] <= $signed({{31{d1_val[n][32]}}, d1_val[n]}) * $signed({32'd0, rq_m[n]});
         d2_addr <= d1_addr;
-        d2_aux  <= (gemm_a_rvalid && a_tag == T_AUX) ? gemm_a_rdata[255:0] : aux_d1;
+        d2_aux  <= (gemm_a_rvalid && a_tag == T_AUX) ? aux_full : aux_d1;
       end
       if (d2_v) begin
         for (int unsigned n = 0; n < 16; n++) begin
@@ -482,10 +540,9 @@ module gemm_engine
   function automatic logic signed [31:0] mul_s16_s16(input logic signed [15:0] x, input logic signed [15:0] y);
     return $signed({{16{x[15]}}, x}) * $signed({{16{y[15]}}, y});
   endfunction
+  // |x * y| <= 32768 * 65535 < 2^31, so the 32-bit product is exact
   function automatic logic signed [31:0] mul_s16_u16(input logic signed [15:0] x, input logic [15:0] y);
-    logic signed [32:0] p;
-    p = $signed({{17{x[15]}}, x}) * $signed({17'd0, y});
-    return p[31:0];
+    return $signed({{16{x[15]}}, x}) * $signed({16'd0, y});
   endfunction
 
   generate
@@ -513,7 +570,7 @@ module gemm_engine
           logic [7:0]  idx, f;
           logic [15:0] l0, l1, sg;
           logic [16:0] diff;
-          logic [24:0] pf;
+          logic [23:0] pf;
           logic signed [31:0] px;
           idx  = {~d4_u[n][15], d4_u[n][14:8]};          // (u >> 8) + 128
           f    = d4_u[n][7:0];
@@ -550,17 +607,28 @@ module gemm_engine
 
   assign out_push = d4_v && adv;
   assign out_in   = {d4_addr, out_pack};
-  assign out_pop  = gemm_wr_grant;
 
   sync_fifo #(.WIDTH(OUT_W), .DEPTH(2)) u_out (
     .clk, .rst_n, .clr(1'b0), .push(out_push), .wdata(out_in), .pop(out_pop),
     .rdata(out_out), .full(out_full), .empty(out_empty), .count(out_count));
 
+  // ---- write port: one 32-B (i16) / 16-B (i8) write per row, split in two 16-B
+  //      pieces when a 32-B write would cross the 256-B line ----
+  assign wr_addr  = out_out[OUT_W-1 -: 24];
+  assign wr_data  = out_out[255:0];
+  assign wr_cross = !out_i8 && (wr_addr[7:4] == 4'hF);
+  assign out_pop  = gemm_wr_grant && (!wr_cross || wr_ph);
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)            wr_ph <= 1'b0;
+    else if (gemm_wr_grant) wr_ph <= wr_cross && !wr_ph;
+  end
+
   assign gemm_wr_valid    = !out_empty;
-  assign gemm_wr_req.addr = out_out[OUT_W-1 -: 24];
-  assign gemm_wr_req.size = out_i8 ? SZ_16 : SZ_32;
-  assign gemm_wr_wdata    = {256'd0, out_out[255:0]};
-  assign gemm_wr_wstrb    = out_i8 ? 64'h0000_0000_0000_FFFF : 64'h0000_0000_FFFF_FFFF;
+  assign gemm_wr_req.addr = wr_addr + (wr_ph ? 24'd16 : 24'd0);
+  assign gemm_wr_req.size = (out_i8 || wr_cross) ? SZ_16 : SZ_32;
+  assign gemm_wr_wdata    = wr_ph ? {384'd0, wr_data[255:128]} : {256'd0, wr_data};
+  assign gemm_wr_wstrb    = (out_i8 || wr_cross) ? 64'h0000_0000_0000_FFFF : 64'h0000_0000_FFFF_FFFF;
 
   // ======================================================================================
   // perf
@@ -575,5 +643,6 @@ module gemm_engine
   assign unused_ok = &{1'b0, out_count, instr[1], instr[0][23:9], instr[0][7:0], instr[2][31:24], instr[3][31:24],
                        instr[4][31:24], instr[5][31:24], instr[6][31:24], instr[7][31:24], instr[8][31:5],
                        instr[9][31:16], instr[10][31:16], instr[11][31:14], instr[11][7:5], instr[13][31:14],
-                       instr[13][7:6], instr[15:14], gemm_a_rdata[511:256], n_cols[3:0], k_len[3:0]};
+                       instr[13][7:6], instr[15:14], gemm_a_rdata[511:256], n_cols[3:0], k_len[3:0], fq_addr[23:8],
+                       fq_addr[3:0]};
 endmodule

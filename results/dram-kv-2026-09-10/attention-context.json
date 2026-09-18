@@ -1,0 +1,13 @@
+{
+  "seed": 1, "dram_latency": 100, "max_outstanding": 32, "head_dim": 64, "query_heads": 1, "query_rows": 1, "tile_rows": 256,
+  "measurements": [
+    {"context": 32, "cycles": 657, "dram_read_bytes": 8192, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 8192, "single_k_plus_v_logical_bytes": 4096, "result": "MATCH"},
+    {"context": 128, "cycles": 2061, "dram_read_bytes": 32768, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 32768, "single_k_plus_v_logical_bytes": 16384, "result": "MATCH"},
+    {"context": 256, "cycles": 3933, "dram_read_bytes": 65536, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 65536, "single_k_plus_v_logical_bytes": 32768, "result": "MATCH"},
+    {"context": 512, "cycles": 7819, "dram_read_bytes": 131072, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 131072, "single_k_plus_v_logical_bytes": 65536, "result": "MATCH"},
+    {"context": 1024, "cycles": 15591, "dram_read_bytes": 262144, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 262144, "single_k_plus_v_logical_bytes": 131072, "result": "MATCH"},
+    {"context": 2048, "cycles": 31135, "dram_read_bytes": 524288, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 524288, "single_k_plus_v_logical_bytes": 262144, "result": "MATCH"},
+    {"context": 4096, "cycles": 62223, "dram_read_bytes": 1048576, "dram_write_bytes": 0, "expected_three_k_plus_v_bytes": 1048576, "single_k_plus_v_logical_bytes": 524288, "result": "MATCH"}
+  ],
+  "status": "PASS"
+}

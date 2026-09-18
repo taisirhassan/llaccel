@@ -24,6 +24,16 @@ static void printOff(OpAsmPrinter &p, Operation *, IntegerAttr attr) {
   p << '[' << (attr ? attr.getInt() : 0) << ']';
 }
 
+static ParseResult parseWeightType(OpAsmParser &parser, TypeAttr &attr) {
+  Type type;
+  if (parser.parseType(type)) return failure();
+  attr = TypeAttr::get(type);
+  return success();
+}
+static void printWeightType(OpAsmPrinter &p, Operation *, TypeAttr attr) {
+  p << attr.getValue();
+}
+
 #include "llaccel/Dialect/LLAccelInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
@@ -259,14 +269,14 @@ void IsaAttnOp::getAccesses(SmallVectorImpl<BufAccess> &out) {
   int64_t region = getHkv() * getKvStride();
   out.push_back(sram(getQ(), getQOff(), qBytes, false));
   out.push_back(sram(getOut(), getOutOff(), qBytes, true));
-  out.push_back(sram(getKbase(), getKbaseOff(), region, false));
-  out.push_back(sram(getVbase(), getVbaseOff(), region, false));
+  out.push_back(dram(getKbaseAttr(), getKbaseOff(), region, false));
+  out.push_back(dram(getVbaseAttr(), getVbaseOff(), region, false));
 }
 
 IsaEngine IsaKvWriteOp::getEngine() { return IsaEngine::ATTN; }
 void IsaKvWriteOp::getAccesses(SmallVectorImpl<BufAccess> &out) {
   out.push_back(sram(getSrc(), getSrcOff(), getM() * getHkv() * getD(), false));
-  out.push_back(sram(getBase(), getBaseOff(), getHkv() * getKvStride(), true));
+  out.push_back(dram(getBaseAttr(), getBaseOff(), getHkv() * getKvStride(), true));
 }
 
 IsaEngine IsaNopOp::getEngine() { return IsaEngine::CP; }

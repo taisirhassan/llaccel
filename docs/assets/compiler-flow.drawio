@@ -1,0 +1,116 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net">
+  <diagram name="compiler-flow">
+    <mxGraphModel grid="1" gridSize="20" page="1" pageWidth="1040" pageHeight="540">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="" style="rounded=0;fillColor=#fafafa;strokeColor=#a1a1aa;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="40" width="510" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="compile" style="text;html=0;align=left;verticalAlign=middle;fontSize=14;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="266" y="49" width="58.8" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="checkpoint&#10;Llama / Qwen" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#52525b;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="30" y="105" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="Python frontend&#10;import + calibrate" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#52525b;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="280" y="105" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="C++ / MLIR&#10;quantize, tile, schedule" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#eff6ff;strokeColor=#2563eb;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="530" y="105" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value=".llbin&#10;instructions + weights" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#52525b;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="810" y="105" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="8" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="4" target="5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="140" as="sourcePoint" />
+            <mxPoint x="280" y="140" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="9" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="5" target="6">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="460" y="140" as="sourcePoint" />
+            <mxPoint x="530" y="140" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="10" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="6" target="7">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="730" y="140" as="sourcePoint" />
+            <mxPoint x="810" y="140" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="11" value="Transformers&#10;float reference" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#f5f3ff;strokeColor=#7c3aed;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="30" y="320" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="NumPy&#10;integer reference" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#f5f3ff;strokeColor=#7c3aed;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="280" y="320" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="compare outputs&#10;integer agreement" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ffffff;strokeColor=#52525b;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="550" y="320" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="execute&#10;ISA simulator / RTL" style="rounded=1;arcSize=6;whiteSpace=wrap;html=0;fillColor=#ecfdf5;strokeColor=#059669;fontSize=15;fontColor=#27272a;" vertex="1" parent="1">
+          <mxGeometry x="810" y="320" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="15" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="4" target="11">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="115" y="175" as="sourcePoint" />
+            <mxPoint x="115" y="320" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="16" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="6" target="12">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="630" y="175" as="sourcePoint" />
+            <mxPoint x="380" y="320" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="630" y="260" />
+              <mxPoint x="380" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="17" value="quantized graph" style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="387" y="232" width="117.0" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="18" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="7" target="14">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="910" y="175" as="sourcePoint" />
+            <mxPoint x="910" y="320" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="19" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="12" target="13">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="355" as="sourcePoint" />
+            <mxPoint x="550" y="355" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="20" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;" source="14" target="13">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="810" y="355" as="sourcePoint" />
+            <mxPoint x="730" y="355" as="targetPoint" />
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="21" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=open;endFill=0;strokeColor=#52525b;startArrow=open;startFill=0;" source="11" target="14">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="115" y="390" as="sourcePoint" />
+            <mxPoint x="910" y="390" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="115" y="470" />
+              <mxPoint x="910" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="22" value="measure quantization error" style="text;html=0;align=left;verticalAlign=middle;fontSize=13;fontColor=#52525b;" vertex="1" parent="1">
+          <mxGeometry x="398" y="441" width="202.79999999999998" height="22" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

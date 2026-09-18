@@ -7,6 +7,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cmath>
 
 using namespace mlir;
 using namespace mlir::llaccel;
@@ -69,10 +70,15 @@ const F32Weights::Entry *F32Weights::find(StringRef name) const {
 const float *F32Weights::get(StringRef name, int64_t expectedElems) const {
   const Entry *e = find(name);
   if (!e) return nullptr;
+  if (expectedElems <= 0 || e->offset < 0 || e->offset % 4) return nullptr;
   int64_t n = 1;
-  for (auto d : e->shape) n *= d;
+  for (auto d : e->shape) {
+    if (d <= 0 || n > expectedElems / d) return nullptr;
+    n *= d;
+  }
   if (n != expectedElems) return nullptr;
-  if (e->offset % 4 || e->offset / 4 + n > int64_t(data.size())) return nullptr;
+  uint64_t first = uint64_t(e->offset / 4);
+  if (first > data.size() || uint64_t(n) > data.size() - first) return nullptr;
   return data.data() + e->offset / 4;
 }
 
@@ -108,6 +114,9 @@ FailureOr<F32Weights> mlir::llaccel::loadF32Weights(StringRef binPath, StringRef
     return emitError(loc) << "weights.bin size is not a multiple of 4";
   w.data.resize(bin->size() / 4);
   std::memcpy(w.data.data(), bin->data(), bin->size());
+  for (float value : w.data)
+    if (!std::isfinite(value))
+      return emitError(loc) << "weights.bin contains a nonfinite f32 value";
   auto parsed = llvm::json::parse(*js);
   if (!parsed)
     return emitError(loc) << "weights.json: " << llvm::toString(parsed.takeError());
@@ -124,6 +133,8 @@ FailureOr<F32Weights> mlir::llaccel::loadF32Weights(StringRef binPath, StringRef
     auto *shape = o->getArray("shape");
     if (!name || !off || !shape)
       return emitError(loc) << "weights.json: entry needs name/shape/offset";
+    if (w.find(*name))
+      return emitError(loc) << "weights.json: duplicate name `" << *name << "`";
     e.name = name->str();
     e.offset = *off;
     for (auto &d : *shape) {
@@ -148,8 +159,9 @@ FailureOr<llvm::StringMap<double>> mlir::llaccel::loadCalib(StringRef path, Loca
   llvm::StringMap<double> m;
   for (auto &kv : *obj) {
     auto v = kv.second.getAsNumber();
-    if (!v)
-      return emitError(loc) << "calib.json: value of `" << kv.first.str() << "` is not a number";
+    if (!v || !std::isfinite(*v) || *v < 0)
+      return emitError(loc) << "calib.json: value of `" << kv.first.str()
+                            << "` must be finite and nonnegative";
     m[kv.first.str()] = *v;
   }
   return m;

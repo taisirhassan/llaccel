@@ -8,10 +8,6 @@ add_mlir_dialect_library(LLAccelDialect
   MLIRLLAccelInterfacesIncGen
 
   LINK_LIBS PUBLIC
-  MLIRIR
-  MLIRSupport
-  MLIRFunctionInterfaces
-  MLIRSideEffectInterfaces
-  MLIRBytecodeOpInterface
 )
 target_compile_options(LLAccelDialect PRIVATE ${LLACCEL_COMPILER_WARNINGS})
+mlir_target_link_libraries(LLAccelDialect PUBLIC MLIRIR MLIRSupport MLIRFunctionInterfaces MLIRSideEffectInterfaces MLIRBytecodeOpInterface)

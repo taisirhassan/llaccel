@@ -15,14 +15,14 @@ package llaccel_pkg;
   localparam int unsigned GEMM_TM     = 16;
   localparam int unsigned VEC_LANES   = 16;
   localparam int unsigned ATTN_LANES  = 64;
-  localparam int unsigned ATTN_TMAX   = 256;
+  localparam int unsigned ATTN_TMAX   = 4096;
   localparam int unsigned NSEM        = 32;
   localparam int unsigned QDEPTH      = 8;
   localparam int unsigned DRAM_BEAT   = 64;
   localparam int unsigned DRAM_DW     = DRAM_BEAT * 8;    // 512
   localparam int unsigned INSTR_BYTES = 64;
   localparam int unsigned INSTR_W     = INSTR_BYTES * 8;  // 512
-  localparam int unsigned NUM_PERF    = 24;
+  localparam int unsigned NUM_PERF    = 27;
   localparam logic [7:0]  NO_SEM      = 8'hFF;
 
   // ---- opcodes ---------------------------------------------------------------------
@@ -110,13 +110,13 @@ package llaccel_pkg;
     PERF_GEMM_EPILOGUE_CYCLES = 8, PERF_VEC_BUSY = 9, PERF_VEC_SRAM_STALL = 10, PERF_ATTN_BUSY = 11,
     PERF_ATTN_SRAM_STALL = 12, PERF_ATTN_MAC_CYCLES = 13, PERF_DMA_BUSY = 14, PERF_DMA_SRAM_STALL = 15,
     PERF_DMA_DRAM_WAIT = 16, PERF_SRAM_RD_BYTES = 17, PERF_SRAM_WR_BYTES = 18, PERF_DRAM_RD_BYTES = 19,
-    PERF_DRAM_WR_BYTES = 20, PERF_GEMM_IDLE_QEMPTY = 21, PERF_VEC_IDLE_QEMPTY = 22, PERF_ATTN_IDLE_QEMPTY = 23;
+    PERF_DRAM_WR_BYTES = 20, PERF_GEMM_IDLE_QEMPTY = 21, PERF_VEC_IDLE_QEMPTY = 22, PERF_ATTN_IDLE_QEMPTY = 23, PERF_ATTN_DRAM_WAIT = 24, PERF_ATTN_DRAM_RD_BYTES = 25, PERF_ATTN_DRAM_WR_BYTES = 26;
 
   // ---- shared arithmetic helpers (docs/NUMERICS.md) --------------------------------------------------
   // round-half-up arithmetic right shift of a 64-bit signed value
   function automatic logic signed [63:0] rshr64(input logic signed [63:0] v, input logic [5:0] s);
     if (s == 0) return v;
-    return (v + (64'sd1 <<< (s - 1))) >>> s;
+    return (v >>> s) + $signed({63'd0, v[s - 1]});
   endfunction
   function automatic logic signed [15:0] sat16(input logic signed [63:0] v);
     if (v > 64'sd32767)  return 16'sd32767;
@@ -134,10 +134,12 @@ package llaccel_pkg;
     return v[7:0];
   endfunction
   // sat(rshr(v * M, S)) with v up to 48-bit signed and M a positive 31-bit multiplier
+  // The true product needs at most 48 + 31 = 79 bits; a 64-bit multiply keeps its
+  // low 64 bits, which is exact whenever |v * m| < 2^63 (every use in NUMERICS.md).
   function automatic logic signed [63:0] mulshift64(input logic signed [47:0] v, input logic [31:0] m, input logic [5:0] s);
-    logic signed [79:0] p;
-    p = $signed({{32{v[47]}}, v}) * $signed({48'd0, m});
-    return rshr64(p[63:0], s);
+    logic signed [63:0] p;
+    p = $signed({{16{v[47]}}, v}) * $signed({32'd0, m});
+    return rshr64(p, s);
   endfunction
 
 endpackage

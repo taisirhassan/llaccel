@@ -1,0 +1,472 @@
+{
+  "v1": {
+    "variant": "v1",
+    "platform": "nangate45",
+    "stage": "synth",
+    "run_directory": "build/orfs/final-dram-kv-native-no-fa-single-pass",
+    "external_sram_included": false,
+    "clock_period_ns": 3.0,
+    "wns_ns": null,
+    "worst_setup_slack_ns": null,
+    "tns_ns": null,
+    "design_area_um2": null,
+    "utilization_pct": null,
+    "total_power_w": null,
+    "instance_count": null,
+    "synth_cells": 1267036,
+    "synth_area_um2": 1824750.157996,
+    "clock_min_period_ns": null,
+    "fmax_mhz_est": null,
+    "timing_source": null,
+    "physical_complete": false,
+    "power_method": "Vectorless OpenSTA; default input activity 0.1 transitions per minimum clock period, duty 0.5; no VCD/SAIF. External SRAM excluded.",
+    "sources": {
+      "clock_period_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/results/nangate45/llaccel_core_v1/base/clock_period.txt",
+      "synth_cells": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/synth_stat.txt",
+      "synth_area_um2": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/synth_stat.txt"
+    },
+    "critical_setup_paths": [],
+    "internal_memory_accounting": {
+      "source": "build/orfs/final-dram-kv-native-no-fa-single-pass/results/nangate45/llaccel_core_v1/base/mem.json",
+      "boundary": "core internal inferred memories before mapping",
+      "mutable_bits": 62620,
+      "rom_bits": 200928,
+      "note": "ROM bits become logic; mutable memories become registers in this flow. These bit counts are not physical macro area.",
+      "memories": [
+        {
+          "module": "llaccel_core",
+          "name": "_19005_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19006_",
+          "width_bits": 14,
+          "depth": 16,
+          "bits": 224,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19007_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19008_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19009_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19010_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19011_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19012_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19013_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19014_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19015_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19016_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19017_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19018_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19019_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19020_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19021_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19022_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19023_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19024_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19025_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19026_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19027_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19028_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19029_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19030_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19031_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19032_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19033_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19034_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19035_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19036_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19037_",
+          "width_bits": 16,
+          "depth": 512,
+          "bits": 8192,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "_19038_",
+          "width_bits": 16,
+          "depth": 256,
+          "bits": 4096,
+          "readonly": true
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_arb.u_tags.mem",
+          "width_bits": 2,
+          "depth": 64,
+          "bits": 128,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_attn.sbuf",
+          "width_bits": 32,
+          "depth": 256,
+          "bits": 8192,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_attn.u_dram_tags.mem",
+          "width_bits": 14,
+          "depth": 32,
+          "bits": 448,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_attn.u_wq.mem_addr",
+          "width_bits": 32,
+          "depth": 2,
+          "bits": 64,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_attn.u_wq.mem_data",
+          "width_bits": 512,
+          "depth": 2,
+          "bits": 1024,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_cp.g_q[0].u_q.mem",
+          "width_bits": 512,
+          "depth": 8,
+          "bits": 4096,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_cp.g_q[1].u_q.mem",
+          "width_bits": 512,
+          "depth": 8,
+          "bits": 4096,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_cp.g_q[2].u_q.mem",
+          "width_bits": 512,
+          "depth": 8,
+          "bits": 4096,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_cp.g_q[3].u_q.mem",
+          "width_bits": 512,
+          "depth": 8,
+          "bits": 4096,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_cp.u_pf.mem",
+          "width_bits": 512,
+          "depth": 4,
+          "bits": 2048,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_dma.u_ldata.mem",
+          "width_bits": 512,
+          "depth": 32,
+          "bits": 16384,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_dma.u_lmeta.mem",
+          "width_bits": 26,
+          "depth": 32,
+          "bits": 832,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_dma.u_rdata.mem",
+          "width_bits": 512,
+          "depth": 4,
+          "bits": 2048,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_dma.u_rmeta.mem",
+          "width_bits": 43,
+          "depth": 4,
+          "bits": 172,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_gemm.acc",
+          "width_bits": 512,
+          "depth": 16,
+          "bits": 8192,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_gemm.u_out.mem",
+          "width_bits": 280,
+          "depth": 2,
+          "bits": 560,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_gemm.wbuf",
+          "width_bits": 2048,
+          "depth": 2,
+          "bits": 4096,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_vec.u_f0.mem",
+          "width_bits": 256,
+          "depth": 4,
+          "bits": 1024,
+          "readonly": false
+        },
+        {
+          "module": "llaccel_core",
+          "name": "u_vec.u_f1.mem",
+          "width_bits": 256,
+          "depth": 4,
+          "bits": 1024,
+          "readonly": false
+        }
+      ]
+    },
+    "external_sram_contract": {
+      "bytes": 1048576,
+      "banks": 16,
+      "bank_word_bits": 128,
+      "words_per_bank": 4096,
+      "physical_macro_implementation": null,
+      "note": "Architectural storage interface only; external SRAM area, timing, leakage and dynamic power are unmeasured."
+    },
+    "sram_estimate": null
+  }
+}

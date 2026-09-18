@@ -10,10 +10,14 @@ module perf_counters
   input  logic [15:0] inc  [NUM_PERF],
   output logic [63:0] perf [NUM_PERF]
 );
-  always_ff @(posedge clk) begin
-    for (int unsigned i = 0; i < NUM_PERF; i++) begin
-      if (!rst_n || clear) perf[i] <= '0;
-      else                 perf[i] <= perf[i] + {48'd0, inc[i]};
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int unsigned i = 0; i < NUM_PERF; i++) perf[i] <= '0;
+    end else begin
+      for (int unsigned i = 0; i < NUM_PERF; i++) begin
+        if (clear) perf[i] <= '0;
+        else       perf[i] <= perf[i] + {48'd0, inc[i]};
+      end
     end
   end
 endmodule

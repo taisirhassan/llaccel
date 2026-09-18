@@ -1,6 +1,7 @@
 +incdir+rtl
 rtl/llaccel_pkg.sv
 rtl/llaccel_luts_pkg.sv
+rtl/verilator.vlt
 rtl/sync_fifo.sv
 rtl/isqrt.sv
 rtl/udiv.sv
@@ -10,6 +11,7 @@ rtl/perf_counters.sv
 rtl/dma_engine.sv
 rtl/gemm_engine.sv
 rtl/vec_engine.sv
+rtl/llaccel_luts_undef.sv
 rtl/attn_engine.sv
 rtl/cmd_proc.sv
 rtl/llaccel_core.sv

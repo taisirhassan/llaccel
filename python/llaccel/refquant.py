@@ -22,9 +22,9 @@ round-half-away-from-zero; same evaluation order of the double arithmetic; same
 Policies (docs/DIALECT.md section 2 and its clarifications, docs/PLAN.md):
 
 * i16 activations: `e = max(ceil(log2(absmax / 32767)), -15)` from calib.json.
-* Residual stream: one global `E_RES` = max exponent over `input`, every `l*.x1`, `l*.x2`
-  and the addends `l*.o`, `l*.d` (which are emitted at `E_RES` so residual adds need no
-  shift). `E_LOGIT` = exponent of `logits`.
+* `E_RES` is the input/embedding exponent. Each residual branch reserves its immediate
+  ADD result headroom; ADD puts the coarser operand first and right-shifts the finer one.
+  `E_LOGIT` = exponent of `logits`.
 * RoPE preserves the exponent: `e(q) = e(qr) = max(e_calib(q), e_calib(qr))`, same for k/kr.
 * `v` projections are emitted i8 (`s = absmax / 127`) straight into the KV cache;
   attention output `a` is i8 (`s_out = absmax(a) / 127`).
@@ -36,8 +36,9 @@ Policies (docs/DIALECT.md section 2 and its clarifications, docs/PLAN.md):
 * Bias: i32 `llround(b / (s_a * s_w[n]))`.
 * `--fusion` (v2): `linear+add` -> epilogue `resadd`, `linear+silu` -> `silu`,
   `linear+mul` -> `mul`; the linear's requant targets the exponent of the pre-epilogue
-  tensor (`o`/`d` -> E_RES, `g`, `u`), the op result carries the fused tensor's name and
-  exponent (`x1`/`x2`, `sg`, `f`). The arithmetic is identical to the unfused ops.
+  tensor (`o`/`d` at their own residual exponent, `g`, `u`), the op result carries the fused tensor's name and
+  exponent (`x1`/`x2`, `sg`, `f`). Residual fusion requires equal exponents;
+  shifted residual ADDs stay explicit. The arithmetic is identical to the unfused ops.
 """
 from __future__ import annotations
 
@@ -73,6 +74,10 @@ def llround(x: float) -> int:
 
 def llround_arr(x: np.ndarray) -> np.ndarray:
     x = np.asarray(x, dtype=np.float64)
+    if not np.all(np.isfinite(x)):
+        raise ValueError("llround_arr requires finite values")
+    if np.any(x >= float(2**63)) or np.any(x < -float(2**63)):
+        raise ValueError("llround_arr input exceeds int64 range")
     t = np.trunc(x)
     frac = x - t
     return np.where(frac >= 0.5, t + 1, np.where(frac <= -0.5, t - 1, t)).astype(np.int64)
@@ -103,7 +108,7 @@ def i16_exponent(absmax: float) -> int:
     """e = max(ceil(log2(absmax / 32767)), -15)."""
     if not (absmax > 0.0):
         return -15
-    return max(int(math.ceil(math.log2(absmax / 32767.0))), -15)
+    return max(int(math.ceil(math.log2(absmax) - math.log2(32767.0))), -15)
 
 
 def i8_scale(absmax: float) -> float:
@@ -112,11 +117,21 @@ def i8_scale(absmax: float) -> float:
 
 
 def quant_i8(v: np.ndarray, scale) -> np.ndarray:
-    return np.clip(llround_arr(np.asarray(v, dtype=np.float64) / scale), -128, 127).astype(np.int8)
+    v, scale = np.asarray(v, dtype=np.float64), np.asarray(scale, dtype=np.float64)
+    if not np.all(np.isfinite(v)) or not np.all(np.isfinite(scale)) or np.any(scale <= 0):
+        raise ValueError("quant_i8 requires finite values and positive finite scales")
+    with np.errstate(over="ignore"):
+        scaled = np.clip(v / scale, -128, 127)
+    return llround_arr(scaled).astype(np.int8)
 
 
 def quant_i16(v: np.ndarray, e: int) -> np.ndarray:
-    return np.clip(llround_arr(np.ldexp(np.asarray(v, dtype=np.float64), -int(e))), -32768, 32767).astype(np.int16)
+    v = np.asarray(v, dtype=np.float64)
+    if not np.all(np.isfinite(v)):
+        raise ValueError("quant_i16 requires finite values")
+    with np.errstate(over="ignore"):
+        scaled = np.clip(np.ldexp(v, -int(e)), -32768, 32767)
+    return llround_arr(scaled).astype(np.int16)
 
 
 def weight_row_scales(w: np.ndarray) -> np.ndarray:
@@ -141,13 +156,16 @@ def quant_params(e_x: int, s_y: float) -> tuple[int, int]:
     return normalize_mulshift(math.ldexp(1.0, int(e_x)) / s_y)
 
 
-def rmsnorm_params(K: int, eps: float, e_x: int, e_g: int, e_y: int, absmax_x: float, name: str) -> dict:
+def rmsnorm_params(K: int, eps: float, e_x: int, e_g: int, e_y: int, absmax_x: float, name: str, rms_min: float | None = None) -> dict:
     """eps_t = llround(eps K 2^(-2 e_x)); R = largest <= 31 with C = llround(2^R sqrt(K)) < 2^32 and the
-    estimated inv (rms ~= absmax/4) below 65535/4; sh_post = R - e_g + e_y."""
+    estimated inv below 65535/4 using measured rms_min, or absmax/4 when absent;
+    sh_post = R - e_g + e_y."""
+    if rms_min is not None and (not math.isfinite(rms_min) or not 0 <= rms_min <= absmax_x):
+        raise ValueError(f"rmsnorm {name}: rms_min must be finite and in [0, absmax]")
     eps_t = llround(eps * float(K) * math.ldexp(1.0, int(-2 * e_x)))
-    if eps_t >= 2**48:
-        raise ValueError(f"rmsnorm {name}: eps_t does not fit in 48 bits")
-    rms_q = (absmax_x / 4.0) / math.ldexp(1.0, int(e_x))
+    if not 0 <= eps_t < 2**32:
+        raise ValueError(f"rmsnorm {name}: eps_t does not fit the ISA u32 operand")
+    rms_q = (absmax_x / 4.0 if rms_min is None else rms_min) / math.ldexp(1.0, int(e_x))
     r_typ = math.floor(math.sqrt(float(K) * rms_q * rms_q + float(eps_t)))
     if r_typ < 1.0:
         r_typ = 1.0
@@ -193,7 +211,7 @@ def mul_shift(e_a: int, e_b: int, e_y: int, name: str) -> int:
 
 def add_shift(e_a: int, e_b: int, name: str) -> int:
     """ADD: y = sat16(a + rshr(b, sh_b)), e_y = e_a, so b must be brought from e_b to e_a: sh_b = e_a - e_b >= 0.
-    (NUMERICS.md writes e_b - e_a; both are 0 for residual adds at E_RES.)"""
+    The coarser operand is ordered first by the quantizer."""
     sh = e_a - e_b
     if not 0 <= sh <= 63:
         raise ValueError(f"add {name}: sh_b = {sh} outside [0, 63] (b must not have a larger exponent than a)")
@@ -295,29 +313,41 @@ class RefQuantizer:
     def absmax(self, name: str) -> float:
         if name not in self.calib:
             raise KeyError(f"calib.json has no entry for activation {name!r}")
-        return float(self.calib[name])
+        value = float(self.calib[name])
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"calibration for {name!r} must be finite and nonnegative")
+        return value
+
+    def quant_absmax(self, name: str, bits: int) -> float:
+        raw = self.absmax(name)
+        key = name + f".i{bits}_absmax"
+        bound = self.absmax(key) if key in self.calib else raw
+        if bound > raw or (raw > 0 and bound == 0):
+            raise ValueError(f"invalid selected quantization bound for {name!r}")
+        return bound
 
     def e16(self, name: str) -> int:
         if name not in self.exps:
-            self.exps[name] = i16_exponent(self.absmax(name))
+            self.exps[name] = i16_exponent(self.quant_absmax(name, 16))
         return self.exps[name]
 
     def s8(self, name: str, src: str | None = None) -> float:
         """Scale of i8 activation `name`, calibrated from `src` (default: `name` minus a `.q` suffix)."""
         if name not in self.scales:
-            self.scales[name] = i8_scale(self.absmax(src or name.removesuffix(".q")))
+            self.scales[name] = i8_scale(self.quant_absmax(src or name.removesuffix(".q"), 8))
         return self.scales[name]
 
     # ---- op emitters -----------------------------------------------------------------------
-    def rmsnorm(self, x: str, gamma: str, y: str) -> None:
+    def rmsnorm(self, x: str, gamma: str, y: str, heads: int = 1) -> None:
         e_x, e_y = self.e16(x), self.e16(y)
         g = self.W[gamma]
         e_g = i16_exponent(float(np.abs(g).max()))
         self.blob.add(gamma, quant_i16(g, e_g), "i16", e_g)
         K = int(g.shape[0])
-        p = rmsnorm_params(K, self.cfg["rms_eps"], e_x, e_g, e_y, self.absmax(x), y)
+        rms_min = self.absmax(x + ".rms_min") if x + ".rms_min" in self.calib else None
+        p = rmsnorm_params(K, self.cfg["rms_eps"], e_x, e_g, e_y, self.absmax(x), y, rms_min)
         self.ops.append({"op": "rmsnorm", "in": x, "gamma": gamma, "out": y, "K": K, "eps_t": p["eps_t"], "C": p["C"],
-                         "sh_post": p["sh_post"]})
+                         "sh_post": p["sh_post"], **({"heads": heads} if heads != 1 else {})})
 
     def quant(self, x: str) -> str:
         y = x + ".q"
@@ -354,6 +384,21 @@ class RefQuantizer:
         self.ops.append({"op": "linear", "in": a, "w": w, "rq": w + ".rq", "bias": bias, "out": y, "N": N, "K": K,
                          "out_dtype": out_dtype, "epilogue": epilogue, "aux": aux, "aux_shift": aux_shift, "silu": silu})
 
+    def residual_linear(self, a: str, w: str, bias: str, branch: str, residual: str, out: str) -> None:
+        """Reserve this ADD's headroom in the branch GEMM, then align its operand scales."""
+        e_residual = self.e16(residual)
+        e_branch = max(self.e16(branch), self.e16(out), e_residual,
+                       i16_exponent(self.quant_absmax(residual, 16)))
+        self.exps[branch] = self.exps[out] = e_branch
+        if self.fusion and e_branch == e_residual:
+            self.linear(a, w, bias, out, "i16", e_rq=e_branch, epilogue="resadd",
+                        aux=residual, aux_shift=0)
+        else:
+            self.linear(a, w, bias, branch, "i16")
+            first, second = (residual, branch) if e_residual == e_branch else (branch, residual)
+            self.ops.append({"op": "add", "a": first, "b": second, "out": out,
+                             "sh_b": add_shift(self.e16(first), self.e16(second), out)})
+
     # ---- the graph -----------------------------------------------------------------------------
     def run(self) -> dict:
         c = self.cfg
@@ -366,19 +411,26 @@ class RefQuantizer:
         if D not in (16, 32, 64):
             raise ValueError(f"head_dim {D} not in (16, 32, 64) (ISA.md ATTN)")
 
-        # global exponents
-        res_names = ["input"] + [f"l{i}.{n}" for i in range(L) for n in ("x1", "x2", "o", "d")]
-        E_RES = max(i16_exponent(self.absmax(n)) for n in res_names)
-        for n in res_names:
-            self.exps[n] = E_RES
-        E_LOGIT = i16_exponent(self.absmax("logits"))
+        # E_RES describes embedding/input only. Later outliers must not reduce
+        # the precision of every earlier residual.
+        E_RES = self.e16("input")
+        E_LOGIT = i16_exponent(self.quant_absmax("logits", 16))
         self.exps["logits"] = E_LOGIT
 
         # constants: embedding (padded rows), RoPE tables
         emb = np.zeros((vocab_padded, dim))
         emb[:vocab] = self.W["embed"]
         self.blob.add("embed", quant_i16(emb, E_RES), "i16", E_RES)
-        cos_t, sin_t = rope_tables(max_seq, D, float(c["rope_base"]))
+        if "rope_cos_input" in self.W or "rope_sin_input" in self.W:
+            tables = []
+            for name in ("rope_cos_input", "rope_sin_input"):
+                table = self.W[name]
+                if table.shape != (max_seq, D // 2) or not np.isfinite(table).all() or ((table < -2.0) | (table > 32767.0 / 16384.0)).any():
+                    raise ValueError(f"invalid static RoPE table {name}")
+                tables.append(llround_arr(table * 16384.0).astype(np.int16))
+            cos_t, sin_t = tables
+        else:
+            cos_t, sin_t = rope_tables(max_seq, D, float(c["rope_base"]))
         self.blob.add("rope_cos", cos_t, "i16")
         self.blob.add("rope_sin", sin_t, "i16")
 
@@ -387,23 +439,25 @@ class RefQuantizer:
             p = f"l{i}"
             self.rmsnorm(residual, f"{p}_attn_norm", f"{p}.h")
             hq = self.quant(f"{p}.h")
-            for a, b in ((f"{p}.q", f"{p}.qr"), (f"{p}.k", f"{p}.kr")):  # RoPE preserves the exponent
-                self.exps[a] = self.exps[b] = max(i16_exponent(self.absmax(a)), i16_exponent(self.absmax(b)))
+            qk_norm = f"{p}_q_norm" in self.W
+            if qk_norm != (f"{p}_k_norm" in self.W):
+                raise ValueError("Q/K normalization must be paired")
+            q_src, k_src = (f"{p}.qn", f"{p}.kn") if qk_norm else (f"{p}.q", f"{p}.k")
+            for a, b in ((q_src, f"{p}.qr"), (k_src, f"{p}.kr")):  # RoPE preserves the exponent
+                self.exps[a] = self.exps[b] = max(i16_exponent(self.quant_absmax(a, 16)), i16_exponent(self.quant_absmax(b, 16)))
             self.linear(hq, f"{p}_wq", f"{p}_bq", f"{p}.q", "i16")
             self.linear(hq, f"{p}_wk", f"{p}_bk", f"{p}.k", "i16")
             self.linear(hq, f"{p}_wv", f"{p}_bv", f"{p}.v", "i8")
-            self.ops.append({"op": "rope", "in": f"{p}.q", "out": f"{p}.qr", "H": H, "D": D})
-            self.ops.append({"op": "rope", "in": f"{p}.k", "out": f"{p}.kr", "H": Hkv, "D": D})
+            if qk_norm:
+                self.rmsnorm(f"{p}.q", f"{p}_q_norm", q_src, heads=H)
+                self.rmsnorm(f"{p}.k", f"{p}_k_norm", k_src, heads=Hkv)
+            self.ops.append({"op": "rope", "in": q_src, "out": f"{p}.qr", "H": H, "D": D})
+            self.ops.append({"op": "rope", "in": k_src, "out": f"{p}.kr", "H": Hkv, "D": D})
             qq, kq = self.quant(f"{p}.qr"), self.quant(f"{p}.kr")
             self.ops.append({"op": "kv_write", "layer": i, "k": kq, "v": f"{p}.v", "Hkv": Hkv, "D": D})
-            self.ops.append({"op": "attention", "q": qq, "layer": i, "out": f"{p}.a", "H": H, "Hkv": Hkv, "D": D,
+            self.ops.append({"op": "attention", "q": qq, "layer": i, "out": f"{p}.a", "H": H, "Hkv": Hkv, "D": D, "prob_bits": 15,
                              **attn_params(self.s8(qq), self.s8(kq), self.s8(f"{p}.v"), self.s8(f"{p}.a"), D)})
-            if self.fusion:
-                self.linear(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.x1", "i16", e_rq=E_RES, epilogue="resadd", aux=residual,
-                            aux_shift=add_shift(E_RES, E_RES, f"{p}.x1"))
-            else:
-                self.linear(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.o", "i16")
-                self.ops.append({"op": "add", "a": residual, "b": f"{p}.o", "out": f"{p}.x1", "sh_b": add_shift(E_RES, E_RES, f"{p}.x1")})
+            self.residual_linear(f"{p}.a", f"{p}_wo", f"{p}_bo", f"{p}.o", residual, f"{p}.x1")
             self.rmsnorm(f"{p}.x1", f"{p}_ffn_norm", f"{p}.h2")
             h2q = self.quant(f"{p}.h2")
             e_g, e_u, e_sg, e_f = (self.e16(f"{p}.{n}") for n in ("g", "u", "sg", "f"))
@@ -418,12 +472,7 @@ class RefQuantizer:
                 self.ops.append({"op": "silu", "in": f"{p}.g", "out": f"{p}.sg", **silu})
                 self.ops.append({"op": "mul", "a": f"{p}.sg", "b": f"{p}.u", "out": f"{p}.f", "sh": sh_mul})
             fq = self.quant(f"{p}.f")
-            if self.fusion:
-                self.linear(fq, f"{p}_wd", f"{p}_bd", f"{p}.x2", "i16", e_rq=E_RES, epilogue="resadd", aux=f"{p}.x1",
-                            aux_shift=add_shift(E_RES, E_RES, f"{p}.x2"))
-            else:
-                self.linear(fq, f"{p}_wd", f"{p}_bd", f"{p}.d", "i16")
-                self.ops.append({"op": "add", "a": f"{p}.x1", "b": f"{p}.d", "out": f"{p}.x2", "sh_b": add_shift(E_RES, E_RES, f"{p}.x2")})
+            self.residual_linear(fq, f"{p}_wd", f"{p}_bd", f"{p}.d", f"{p}.x1", f"{p}.x2")
             residual = f"{p}.x2"
         self.rmsnorm(residual, "norm", "hn")
         hnq = self.quant("hn")

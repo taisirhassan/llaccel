@@ -1,14 +1,15 @@
 # tb/vec/Makefile — Verilator unit tests for vec_engine, isqrt, udiv.
 #   make            build + run both tests
-#   make lint       verilator --lint-only -Wall on the vec RTL
+#   make lint       verilator --lint-only -Wall on the vec RTL (waivers: llaccel_lint.vlt, package files only)
 ROOT      := $(abspath ../..)
 BUILD     := $(ROOT)/build/tb/vec
 VERILATOR ?= verilator
 SEED      ?= 1
+JOBS      ?= 3
 
-RTL := $(ROOT)/rtl/llaccel_pkg.sv $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv $(ROOT)/rtl/vec_engine.sv
+RTL := $(ROOT)/rtl/llaccel_pkg.sv $(ROOT)/rtl/llaccel_luts_pkg.sv $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv $(ROOT)/rtl/vec_engine.sv
 STUB := $(ROOT)/tb/common/sram_stub.sv
-VFLAGS := --cc --exe --build -j 0 --assert -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL \
+VFLAGS := --cc --exe --build -j $(JOBS) --assert -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL \
           -I$(ROOT)/rtl -CFLAGS "-std=c++20 -O2 -I$(ROOT)/include"
 
 .PHONY: all run build lint clean
@@ -21,16 +22,16 @@ $(BUILD)/vec/Vtb_vec_top: $(RTL) $(STUB) tb_vec_top.sv tb_vec.cpp $(ROOT)/includ
 	@mkdir -p $(BUILD)/vec
 	$(VERILATOR) $(VFLAGS) --top-module tb_vec_top --Mdir $(BUILD)/vec $(RTL) $(STUB) tb_vec_top.sv tb_vec.cpp
 
-$(BUILD)/math/Vtb_math_top: $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv tb_math_top.sv tb_math.cpp
+$(BUILD)/math/Vtb_math_top: $(ROOT)/rtl/llaccel_pkg.sv $(ROOT)/include/llaccel/numerics.h $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv tb_math_top.sv tb_math.cpp
 	@mkdir -p $(BUILD)/math
-	$(VERILATOR) $(VFLAGS) --top-module tb_math_top --Mdir $(BUILD)/math $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv tb_math_top.sv tb_math.cpp
+	$(VERILATOR) $(VFLAGS) --top-module tb_math_top --Mdir $(BUILD)/math -Wno-UNUSEDPARAM $(ROOT)/rtl/llaccel_pkg.sv $(ROOT)/rtl/isqrt.sv $(ROOT)/rtl/udiv.sv tb_math_top.sv tb_math.cpp
 
 run: build
 	$(BUILD)/math/Vtb_math_top
 	$(BUILD)/vec/Vtb_vec_top +seed=$(SEED)
 
 lint:
-	$(VERILATOR) --lint-only -Wall $(RTL) --top-module vec_engine
+	$(VERILATOR) --lint-only -Wall llaccel_lint.vlt $(RTL) $(ROOT)/rtl/attn_engine.sv --top-module vec_engine -I$(ROOT)/rtl
 
 clean:
 	rm -rf $(BUILD)

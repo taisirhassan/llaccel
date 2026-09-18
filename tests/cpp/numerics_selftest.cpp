@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "llaccel/numerics.h"
+#include "llaccel/Support/QuantParams.h"
 
 using namespace llaccel::num;
 
@@ -15,11 +16,50 @@ static int fails = 0;
 
 int main() {
   std::mt19937_64 rng(1);
+  CHECK(llaccel::qp::i16Exponent(std::numeric_limits<double>::denorm_min()) == -15, "subnormal exponent");
+  CHECK(llaccel::qp::quantI8(1e300, 1e-300) == 127, "huge i8 saturates before llround");
+  CHECK(llaccel::qp::quantI16(-1e300, -15) == -32768, "huge i16 saturates before llround");
+  CHECK(llaccel::qp::gemmBias(1e300, 1e-30, 1e-30) == INT32_MAX, "huge bias saturates before llround");
+  CHECK(!llaccel::qp::rmsnormParams(1, 4294967296.0, 0, 0, 0, 1, "test"), "reject RMS epsilon exceeding ISA u32");
+  CHECK(llaccel::qp::rmsnormParams(1, 4294967295.0, 0, 0, 0, 1, "test").has_value(), "accept maximum RMS epsilon operand");
+  // A high abs-max may coexist with quiet rows. Measured RMS prevents the
+  // 16-bit reciprocal from saturating on those rows.
+  {
+    auto legacy = llaccel::qp::rmsnormParams(896, 1e-6, -10, -14, -10, 100, "quiet");
+    auto calibrated = llaccel::qp::rmsnormParams(896, 1e-6, -10, -14, -10, 100, "quiet", 0.1);
+    CHECK(legacy && calibrated, "RMS minimum parameters are representable");
+    if (legacy && calibrated) {
+      CHECK(calibrated->C < legacy->C, "RMS minimum lowers reciprocal numerator");
+      std::vector<int16_t> x(896, 102), g(896, 16384), y(896);
+      rmsnorm(x, g, y, uint32_t(calibrated->eps_t), uint32_t(calibrated->C),
+              uint32_t(calibrated->sh_post));
+      const double value = 102.0 / 1024;
+      const double expected = value / std::sqrt(value * value + 1e-6);
+      CHECK(std::abs(y[0] / 1024.0 - expected) < 0.002,
+            "calibrated quiet-row RMS output: %d", y[0]);
+    }
+    for (double invalid : {-1.0, 101.0, std::numeric_limits<double>::infinity(),
+                           std::numeric_limits<double>::quiet_NaN()})
+      CHECK(!llaccel::qp::rmsnormParams(896, 1e-6, -10, -14, -10, 100, "quiet", invalid),
+            "reject invalid minimum RMS");
+    CHECK(llaccel::qp::rmsnormParams(896, 1e-6, -10, -14, -10, 100, "quiet", 0.0).has_value(),
+          "zero RMS row uses epsilon");
+  }
   // rshr: round half up
   CHECK(rshr(5, 1) == 3, "rshr(5,1)");
   CHECK(rshr(-5, 1) == -2, "rshr(-5,1)=%lld", (long long)rshr(-5, 1));
   CHECK(rshr(7, 0) == 7, "rshr s=0");
   CHECK(sat16(40000) == 32767 && sat16(-40000) == -32768 && sat8(200) == 127, "saturation");
+  // Independent 128-bit oracle: adding the rounding offset must not wrap i64.
+  std::mt19937_64 roundingRng(17);
+  for (uint32_t shift = 0; shift < 64; ++shift) {
+    for (unsigned trial = 0; trial < 256; ++trial) {
+      const int64_t value = trial == 0 ? INT64_MAX : trial == 1 ? INT64_MIN : int64_t(roundingRng());
+      const __int128 wide = value;
+      const int64_t expected = shift ? int64_t((wide + (__int128(1) << (shift - 1))) >> shift) : value;
+      CHECK(rshr(value, shift) == expected, "rshr full-width boundary shift=%u", shift);
+    }
+  }
   // isqrt
   for (int i = 0; i < 100000; ++i) {
     uint64_t t = rng() & ((uint64_t(1) << 48) - 1);

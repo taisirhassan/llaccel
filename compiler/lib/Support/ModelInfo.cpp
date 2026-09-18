@@ -2,8 +2,10 @@
 #include "llaccel/Support/ModelInfo.h"
 
 #include "llaccel/Dialect/LLAccelDialect.h"
+#include "llaccel/isa.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include <cmath>
 
 using namespace mlir;
 using namespace mlir::llaccel;
@@ -36,6 +38,19 @@ FailureOr<ModelInfo> ModelInfo::read(ModuleOp module) {
       failed(geti("vocab", m.vocab)) || failed(geti("max_seq", m.maxSeq)) ||
       failed(getf("rope_base", m.ropeBase)) || failed(getf("rms_eps", m.rmsEps)))
     return failure();
+  if (m.dim <= 0 || m.nLayers <= 0 || m.nHeads <= 0 || m.nKvHeads <= 0 ||
+      m.headDim <= 0 || m.ffn <= 0 || m.vocab <= 0 || m.maxSeq <= 0 ||
+      m.nHeads % m.nKvHeads != 0 || !std::isfinite(m.ropeBase) ||
+      m.ropeBase <= 0 || !std::isfinite(m.rmsEps) || m.rmsEps <= 0)
+    return module.emitError("llaccel.model: invalid dimensions, head grouping, or numerical constants");
+  if (m.maxSeq > ::llaccel::kAttnTMax || m.nHeads > 255 || m.nKvHeads > 255)
+    return module.emitError("llaccel.model: context or head count exceeds ISA limits");
+  if (m.headDim != 16 && m.headDim != 32 && m.headDim != 64 &&
+      m.headDim != 128 && m.headDim != 256)
+    return module.emitError("llaccel.model: head_dim must be 16, 32, 64, 128 or 256");
+  if (m.dim > UINT32_MAX / 32 || m.ffn > UINT32_MAX / 32 ||
+      m.vocab > UINT32_MAX / 32 || m.nLayers > UINT32_MAX / 2)
+    return module.emitError("llaccel.model: dimensions exceed 32-bit ISA byte spans");
   if (dict.contains("E_RES")) {
     m.quantized = true;
     if (failed(geti("E_RES", m.eRes)) || failed(geti("E_LOGIT", m.eLogit)) ||

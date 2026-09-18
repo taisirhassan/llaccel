@@ -118,12 +118,19 @@ module sram_stub #(
     end
   end
 
-  // ---- contract checks ----------------------------------------------------------------------
+  // A denied request must remain valid and stable until granted. Check writes'
+  // payload too: a stalled holding register must not be overwritten.
+  assert property (@(posedge clk) disable iff (!rst_n)
+    rd0_valid && !rd0_grant |=> rd0_valid && $stable(rd0_req));
+  assert property (@(posedge clk) disable iff (!rst_n)
+    rd1_valid && !rd1_grant |=> rd1_valid && $stable(rd1_req));
+  assert property (@(posedge clk) disable iff (!rst_n)
+    wr_valid && !wr_grant |=> wr_valid && $stable(wr_req) && $stable(wr_wdata) && $stable(wr_wstrb));
+
+  // ---- contract checks (req_legal() passes for an invalid request, so no reset gating) -------------
   always_ff @(posedge clk) begin
-    if (rst_n) begin
-      if (!req_legal(rd0_valid, rd0_req)) $fatal(1, "sram_stub: illegal rd0 request addr=%h size=%0d", rd0_req.addr, rd0_req.size);
-      if (!req_legal(rd1_valid, rd1_req)) $fatal(1, "sram_stub: illegal rd1 request addr=%h size=%0d", rd1_req.addr, rd1_req.size);
-      if (!req_legal(wr_valid, wr_req))   $fatal(1, "sram_stub: illegal wr request addr=%h size=%0d", wr_req.addr, wr_req.size);
-    end
+    if (!req_legal(rd0_valid, rd0_req)) $fatal(1, "sram_stub: illegal rd0 request addr=%h size=%0d", rd0_req.addr, rd0_req.size);
+    if (!req_legal(rd1_valid, rd1_req)) $fatal(1, "sram_stub: illegal rd1 request addr=%h size=%0d", rd1_req.addr, rd1_req.size);
+    if (!req_legal(wr_valid, wr_req))   $fatal(1, "sram_stub: illegal wr request addr=%h size=%0d", wr_req.addr, wr_req.size);
   end
 endmodule

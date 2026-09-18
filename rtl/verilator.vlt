@@ -1,0 +1,33 @@
+// Lint waivers for the `verilator --lint-only -Wall -f rtl/filelist.f` gate.
+// Every entry names the file it applies to and the reason. The whole file is
+// wrapped in `ifdef VERILATOR so that slang / yosys-slang, which read the same
+// filelist, see an empty compilation unit.
+`ifdef VERILATOR
+`verilator_config
+// attn_engine.sv (owned by the attention/vector engineer): `d_R` (decoded row
+// count of a KV_WRITE) and `D_r` (registered head dimension) differ only in
+// case. Both follow that file's decode/register naming scheme, they never
+// alias, and renaming is outside this file's owner boundary.
+lint_off -rule SIMILARNAME -file "*rtl/attn_engine.sv" -match "*'d_R'*"
+// attn_engine.sv: `out_r` is a registered copy of the output base that the
+// engine walks through `orow` instead; `s_t`/`tz_q` are 9-bit key indices whose
+// MSB only matters for the T == 256 comparison path they are copied from.
+lint_off -rule UNUSEDSIGNAL -file "*rtl/attn_engine.sv" -match "*'out_r'*"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/attn_engine.sv" -match "*'s_t'[8]*"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/attn_engine.sv" -match "*'tz_q'[8]*"
+// llaccel_luts_pkg.sv wraps the generated tables (rtl/llaccel_luts.svh) for
+// gemm_engine, which only needs SIGMOID_LUT; the attention exp tables are used
+// by attn_engine through its own direct include.
+lint_off -rule UNUSEDPARAM -file "*rtl/llaccel_luts.svh" -match "*'EXP_INT_LUT'*"
+lint_off -rule UNUSEDPARAM -file "*rtl/llaccel_luts.svh" -match "*'EXP_FRAC_LUT'*"
+// llaccel_pkg.sv: the instruction-field accessors take the whole packed
+// instruction (shared signature with the other engines) and read one field.
+lint_off -rule UNUSEDSIGNAL -file "*rtl/llaccel_pkg.sv" -match "*function variable are not used: 'w'*"
+// rtl/filelist_core_stubs.f only: the stubs deliberately carry the real
+// engines' module names in differently named files, and the vector/attention
+// device parameters are consumed only by the real engines.
+lint_off -rule DECLFILENAME -file "*rtl/stubs/*_stub.sv"
+lint_off -rule UNUSEDPARAM -file "*rtl/llaccel_pkg.sv" -match "*'VEC_LANES'*"
+lint_off -rule UNUSEDPARAM -file "*rtl/llaccel_pkg.sv" -match "*'ATTN_LANES'*"
+lint_off -rule UNUSEDPARAM -file "*rtl/llaccel_pkg.sv" -match "*'ATTN_TMAX'*"
+`endif

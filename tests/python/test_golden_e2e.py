@@ -227,7 +227,9 @@ def test_full_python_pipeline(tiny_export):
     assert "input" in calib and "l1.x2" in calib and "logits" in calib and len(calib) == 2 + 16 * 2 + 1
     q1 = quantize_export(ex, ex.parent / "q1", fusion=False)
     q2 = quantize_export(ex, ex.parent / "q2", fusion=True)
-    assert len(q1["ops"]) == 2 * 22 + 3 and len(q2["ops"]) == 2 * 18 + 3  # v2 drops add, silu, mul, add per layer
+    eligible_adds = sum(op["op"] == "add" and op["sh_b"] == 0 for op in q1["ops"])
+    assert len(q1["ops"]) == 2 * 22 + 3
+    assert len(q2["ops"]) == len(q1["ops"]) - 2 * cfg.n_layers - eligible_adds
     g1, g2 = G.GoldenModel(ex.parent / "q1"), G.GoldenModel(ex.parent / "q2")
     assert g1.generate([0, 1, 2], 20) == g2.generate([0, 1, 2], 20)
     r = compare_models(model, CharTokenizer(itos), ex.parent / "q1", "abc", 10)
@@ -235,3 +237,31 @@ def test_full_python_pipeline(tiny_export):
     assert len(r["golden_text"]) == 10 and len(r["fp32_text"]) == 10
 
 
+@pytest.mark.parametrize('prefill_m', [1, 4])
+def test_configurable_prefill_matches_sequential_rows(tmp_path, prefill_m):
+    directory = build_fixture(tmp_path / 'qgraph', fuse=False)
+    path = directory / 'qgraph.json'
+    graph = json.loads(path.read_text())
+    graph['model']['prefill_m'] = prefill_m
+    path.write_text(json.dumps(graph))
+    tokens = [i % VOCAB for i in range(9)]
+    chunked = G.GoldenModel(directory)
+    sequential = G.GoldenModel(directory)
+    for i, row in enumerate(chunked.prefill(tokens)):
+        np.testing.assert_array_equal(row, sequential.decode(tokens[i], i))
+    result = chunked.generate(tokens, 2)
+    prefill_steps = [step for step in result['steps'] if step['kind'] == 'prefill']
+    assert len(prefill_steps) == math.ceil(len(tokens) / prefill_m)
+    assert all(step['rows'] == prefill_m for step in prefill_steps)
+    assert prefill_steps[-1]['valid_rows'] == (len(tokens) - 1) % prefill_m + 1
+
+
+@pytest.mark.parametrize('prefill_m', [0, 3, 17])
+def test_golden_rejects_invalid_prefill_storage(tmp_path, prefill_m):
+    directory = build_fixture(tmp_path / 'qgraph', fuse=False)
+    path = directory / 'qgraph.json'
+    graph = json.loads(path.read_text())
+    graph['model']['prefill_m'] = prefill_m
+    path.write_text(json.dumps(graph))
+    with pytest.raises(ValueError, match='max_seq must be divisible by prefill_m'):
+        G.GoldenModel(directory)

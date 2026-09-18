@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <print>
 #include <ranges>
 #include <stdexcept>
@@ -43,8 +44,29 @@ std::string Tokenizer::decode(const std::vector<uint32_t>& ids) const {
 }
 
 // ---- host ------------------------------------------------------------------------------------
-Host::Host(const Llbin& bin, Device& dev, const Tokenizer& tok) : bin_(bin), dev_(dev), tok_(tok) {
+Host::Host(const Llbin& bin, Device& dev) : bin_(bin), dev_(dev) {
   const auto& m = bin.meta.at("model");
+  uint64_t requiredHeadDim = 0;
+  if (m.contains("head_dim")) {
+    const auto& value = m.at("head_dim");
+    if (!value.is_number_integer() ||
+        (!value.is_number_unsigned() && value.get<int64_t>() <= 0))
+      throw std::runtime_error("invalid model head_dim");
+    requiredHeadDim = value.get<uint64_t>();
+    if (requiredHeadDim == 0) throw std::runtime_error("invalid model head_dim");
+  }
+  // check instructions before upload; metadata cannot bypass backend limits.
+  for (const auto& program : bin.programs)
+    for (const auto& in : program.instrs) {
+      uint32_t D = 0;
+      if (in.op() == Op::ATTN) D = in[9];
+      else if (in.op() == Op::KV_WRITE || in.op() == Op::VEC_ROPE) D = in[6];
+      requiredHeadDim = std::max<uint64_t>(requiredHeadDim, D);
+    }
+  if (requiredHeadDim > dev.maxAttentionHeadDim())
+    throw std::runtime_error("model requires attention head dimension " + std::to_string(requiredHeadDim) +
+      "; backend " + dev.name() + " supports at most " + std::to_string(dev.maxAttentionHeadDim()) +
+      ". Rebuild or select a backend implementing the required head width.");
   vocab_ = m.at("vocab").get<uint32_t>();
   dim_ = m.at("dim").get<uint32_t>();
   maxSeq_ = m.at("max_seq").get<uint32_t>();
@@ -55,14 +77,36 @@ Host::Host(const Llbin& bin, Device& dev, const Tokenizer& tok) : bin_(bin), dev
   inRowBytes_ = d.at("input").at("row_bytes").get<uint64_t>();
   lgAddr_ = d.at("logits").at("addr").get<uint64_t>();
   lgRowBytes_ = d.at("logits").at("row_bytes").get<uint64_t>();
+  if (bin.programs.empty()) throw std::runtime_error("no programs in llbin");
+  if (!vocab_ || !dim_ || !maxSeq_) throw std::runtime_error("invalid zero model dimension");
   prefillM_ = std::ranges::max(bin.programs | std::views::transform(&Program::M));
   if (prefillM_ == 0) throw std::runtime_error("no programs in llbin");
-  if (tok.itos.size() != vocab_) throw std::runtime_error("tokenizer size != model vocab");
-  if (embRowBytes_ < dim_ * 2 || inRowBytes_ < dim_ * 2) throw std::runtime_error("embedding/input row too small for dim");
+  if (lgRowBytes_ < uint64_t(vocab_) * 2) throw std::runtime_error("logits row too small for vocab");
+  if (embRowBytes_ < uint64_t(dim_) * 2 || inRowBytes_ < uint64_t(dim_) * 2) throw std::runtime_error("embedding/input row too small for dim");
+  auto region = [&](uint64_t base, uint64_t stride, uint64_t rows) {
+    if (base > bin.dramImage.size() || !stride || rows > (bin.dramImage.size() - base) / stride)
+      throw std::runtime_error("model buffer metadata exceeds DRAM image");
+  };
+  if (maxSeq_ > kAttnTMax || maxSeq_ % prefillM_)
+    throw std::runtime_error("invalid context/prefill dimensions");
+  region(embAddr_, embRowBytes_, vocab_);
+  region(inAddr_, inRowBytes_, prefillM_);
+  region(lgAddr_, lgRowBytes_, prefillM_);
+  if (d.contains("kv_cache")) {
+    if (!d["kv_cache"].is_array()) throw std::runtime_error("DRAM KV metadata must be an array");
+    for (const auto& cache : d["kv_cache"])
+      region(cache.at("addr").get<uint64_t>(), cache.at("bytes").get<uint64_t>(), 1);
+  }
   dev_.dramWrite(0, bin.dramImage.data(), bin.dramImage.size());
 }
 
+Host::Host(const Llbin& bin, Device& dev, const Tokenizer& tok) : Host(bin, dev) {
+  if (tok.itos.size() != vocab_) throw std::runtime_error("tokenizer size != model vocab");
+  tok_ = &tok;
+}
+
 void Host::writeInputRow(uint32_t row, uint32_t token) {
+  if (token != UINT32_MAX && token >= vocab_) throw std::runtime_error("token ID exceeds model vocabulary");
   std::vector<uint8_t> buf(inRowBytes_, 0);
   if (token != UINT32_MAX) dev_.dramRead(embAddr_ + uint64_t(token) * embRowBytes_, buf.data(), dim_ * 2);
   dev_.dramWrite(inAddr_ + uint64_t(row) * inRowBytes_, buf.data(), inRowBytes_);
@@ -75,20 +119,43 @@ std::vector<int16_t> Host::readLogitsRow(uint32_t row) {
 }
 
 StepResult Host::launch(const std::vector<uint32_t>& rowTokens, uint32_t M, uint32_t pos, uint32_t logitsRow) {
-  if (pos + M > maxSeq_) throw std::runtime_error("sequence exceeds max_seq");
+  if (M > maxSeq_ || pos > maxSeq_ - M) throw std::runtime_error("sequence exceeds max_seq");
   for (uint32_t r = 0; r < M; ++r) writeInputRow(r, r < rowTokens.size() ? rowTokens[r] : UINT32_MAX);
   const Program& prog = bin_.programForM(M);
   StepResult s{.pos = pos, .M = M, .argmax = 0, .logits = {}, .perf = dev_.run(prog.pc, pos)};
   s.logits = readLogitsRow(logitsRow);
-  // Greedy: first index of the maximum (ties -> lowest index, same as numpy argmax).
+  // greedy: first index of the maximum (ties -> lowest index, same as numpy argmax).
   s.argmax = uint32_t(std::ranges::max_element(s.logits) - s.logits.begin());
   return s;
 }
 
 GenerationResult Host::generate(const std::string& prompt, uint32_t nTokens, bool verbose) {
+  if (!tok_) throw std::runtime_error("text generation requires a character tokenizer; use generateTokens");
+  return generateTokens(tok_->encode(prompt), nTokens, verbose);
+}
+
+GenerationResult Host::generateTokens(const std::vector<uint32_t>& prompt, uint32_t nTokens, bool verbose) {
   GenerationResult r;
-  r.promptTokens = tok_.encode(prompt);
+  r.promptTokens = prompt;
   if (r.promptTokens.empty()) throw std::runtime_error("empty prompt");
+  if (r.promptTokens.size() > maxSeq_ || nTokens > maxSeq_ - r.promptTokens.size())
+    throw std::runtime_error("prompt + tokens exceeds max_seq");
+  for (auto id : r.promptTokens)
+    if (id >= vocab_) throw std::runtime_error("prompt token ID exceeds model vocabulary");
+  // each generation starts a session; clear KV DRAM while preserving weights
+  // and program bytes. launches within the call share the cache.
+  if (bin_.meta.at("dram").contains("kv_cache")) {
+    const std::array<uint8_t, 4096> zeros{};
+    for (const auto& cache : bin_.meta.at("dram").at("kv_cache")) {
+      uint64_t addr = cache.at("addr").get<uint64_t>(), remaining = cache.at("bytes").get<uint64_t>();
+      while (remaining) {
+        const uint64_t count = std::min<uint64_t>(remaining, zeros.size());
+        dev_.dramWrite(addr, zeros.data(), count);
+        addr += count;
+        remaining -= count;
+      }
+    }
+  }
   uint32_t L = uint32_t(r.promptTokens.size());
   uint32_t nChunks = (L + prefillM_ - 1) / prefillM_;
   uint32_t next = 0;
@@ -106,8 +173,10 @@ GenerationResult Host::generate(const std::string& prompt, uint32_t nTokens, boo
     r.generated.push_back(next);
     if (L + i + 1 >= maxSeq_) break;  // no room for another position
     StepResult s = launch({next}, 1, L + i, 0);
-    if (verbose)
-      std::println("  decode {}/{}: pos={} cycles={} tok={} '{}'", i + 1, nTokens, L + i, s.perf[PERF_CYCLES], next, tok_.itos[next]);
+    if (verbose) {
+      std::println("  decode {}/{}: pos={} cycles={} tok={}", i + 1, nTokens, L + i, s.perf[PERF_CYCLES], next);
+      if (tok_) std::println("    character: '{}'", tok_->itos[next]);
+    }
     next = s.argmax;
     r.steps.push_back(std::move(s));
   }
@@ -141,13 +210,50 @@ nlohmann::json GenerationResult::toJson() const {
   return j;
 }
 
+namespace {
+// JSON numeric conversions otherwise silently truncate fractions or wrap narrow integers.
+template <typename T>
+std::vector<T> goldenIntegerArray(const nlohmann::json& array, const char* field) {
+  if (!array.is_array()) throw std::runtime_error(std::string("golden ") + field + " must be an array");
+  std::vector<T> values;
+  values.reserve(array.size());
+  for (const auto& value : array) {
+    bool valid = false;
+    if (value.is_number_unsigned()) {
+      valid = value.get<uint64_t>() <= uint64_t(std::numeric_limits<T>::max());
+    } else if (value.is_number_integer()) {
+      const auto integer = value.get<int64_t>();
+      valid = integer >= int64_t(std::numeric_limits<T>::min()) &&
+              integer <= int64_t(std::numeric_limits<T>::max());
+    }
+    if (!valid) throw std::runtime_error(std::string("golden ") + field + " contains a non-integer or out-of-range value");
+    values.push_back(value.get<T>());
+  }
+  return values;
+}
+} // namespace
+
+std::vector<uint32_t> loadPromptIds(const std::string& path) {
+  std::ifstream f(path);
+  if (!f) throw std::runtime_error("cannot open prompt IDs " + path);
+  const auto array = nlohmann::json::parse(f);
+  // reuse the strict integer validation used for reference traces.
+  return goldenIntegerArray<uint32_t>(array, "prompt IDs");
+}
+
 bool verifyAgainstGolden(const GenerationResult& r, const std::string& goldenPath, bool verbose) {
   std::ifstream f(goldenPath);
   if (!f) throw std::runtime_error("cannot open golden " + goldenPath);
   auto g = nlohmann::json::parse(f);
-  auto gp = g.at("prompt_tokens").get<std::vector<uint32_t>>();
-  auto gg = g.at("generated").get<std::vector<uint32_t>>();
-  auto ga = g.at("argmax_per_step").get<std::vector<uint32_t>>();
+  auto gp = goldenIntegerArray<uint32_t>(g.at("prompt_tokens"), "prompt_tokens");
+  auto gg = goldenIntegerArray<uint32_t>(g.at("generated"), "generated");
+  auto ga = goldenIntegerArray<uint32_t>(g.at("argmax_per_step"), "argmax_per_step");
+  if (!g.contains("logits_last_rows")) throw std::runtime_error("golden trace has no logits");
+  const auto& rows = g.at("logits_last_rows");
+  if (!rows.is_array()) throw std::runtime_error("golden logits_last_rows must be an array");
+  std::vector<std::vector<int16_t>> gl;
+  gl.reserve(rows.size());
+  for (const auto& row : rows) gl.push_back(goldenIntegerArray<int16_t>(row, "logits_last_rows"));
   bool ok = true;
   if (gp != r.promptTokens) { std::println("VERIFY: prompt tokens differ from golden"); ok = false; }
   size_t n = std::min(ga.size(), r.steps.size());
@@ -157,10 +263,19 @@ bool verifyAgainstGolden(const GenerationResult& r, const std::string& goldenPat
       ok = false;
       break;
     }
-  if (ok && ga.size() != r.steps.size())
-    std::println("VERIFY: note: {} steps run vs {} golden steps (compared the first {})", r.steps.size(), ga.size(), n);
-  if (ok && g.contains("logits_last_rows")) {
-    auto gl = g.at("logits_last_rows").get<std::vector<std::vector<int16_t>>>();
+  if (ga.size() != r.steps.size()) {
+    std::println("VERIFY: launch count {} != golden {}", r.steps.size(), ga.size());
+    ok = false;
+  }
+  if (gg.size() != r.generated.size()) {
+    std::println("VERIFY: generated count {} != golden {}", r.generated.size(), gg.size());
+    ok = false;
+  }
+  if (ok) {
+    if (gl.size() != r.steps.size()) {
+      std::println("VERIFY: logits row count {} != launches {}", gl.size(), r.steps.size());
+      ok = false;
+    }
     for (size_t i = 0; i < std::min(gl.size(), r.steps.size()); ++i)
       if (gl[i] != r.steps[i].logits) {
         auto [a, b] = std::ranges::mismatch(gl[i], r.steps[i].logits);

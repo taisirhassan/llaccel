@@ -192,3 +192,40 @@ def test_rope_position_zero_is_identity_and_exponent_preserved():
     cos_t = np.full((4, D // 2), 16384)  # cos(0) = 1.0 in Q1.14
     sin_t = np.zeros((4, D // 2), np.int64)
     assert np.array_equal(G.rope(x, H, D, cos_t, sin_t, 0), x)
+
+
+def test_attention_additive_score_offset_invariance():
+    for prob_bits in (8, 15):
+        for dim in (16, 32, 64):
+            q = np.zeros(dim, dtype=np.int64)
+            q[0] = 127
+            vals = np.zeros((2, dim), dtype=np.int64)
+            vals[:, 0] = [-127, 127]
+            outputs = []
+            for offset in (0, 126, -128):
+                keys = np.zeros((2, dim), dtype=np.int64)
+                keys[:, 0] = [offset, offset + 1]
+                outputs.append(G.attention_head(q, keys, vals, 1 << 30, 24, 1 << 30, 38, prob_bits))
+            assert all(np.array_equal(out, outputs[0]) for out in outputs)
+            assert outputs[0][0] == 127  # gap exceeds exp cutoff, independent oracle
+            # Largest valid unsigned multiplier and dot gap must not wrap.
+            q.fill(127)
+            keys = np.array([[-128] * dim, [127] * dim], dtype=np.int64)
+            extreme = G.attention_head(q, keys, vals, 2**32 - 1, 0, 1 << 30, 38, prob_bits)
+            assert extreme[0] == 127
+
+
+def test_attention_common_offset_preserves_nontrivial_softmax():
+    q = np.zeros(16, dtype=np.int64)
+    q[0], q[1] = 1, 127
+    keys = np.zeros((2, 16), dtype=np.int64)
+    keys[:, 0] = [0, 1]
+    vals = np.zeros((2, 16), dtype=np.int64)
+    vals[:, 0] = [-127, 127]
+    for prob_bits in (8, 15):
+        baseline = G.attention_head(q, keys, vals, 1 << 30, 24, 1 << 30, 38, prob_bits)
+        shifted = keys.copy()
+        shifted[:, 1] = 126  # common scaled logit >1million, delta remains64
+        out = G.attention_head(q, shifted, vals, 1 << 30, 24, 1 << 30, 38, prob_bits)
+        assert np.array_equal(out, baseline)
+        assert abs(int(out[0]) - 127 * math.tanh(0.125)) <= 1

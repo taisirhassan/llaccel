@@ -1,5 +1,5 @@
 # llaccel MLIR compiler. Builds standalone (cmake -S compiler -B build/compiler)
-# or as a subdirectory of the top-level project.
+# or as a subdirectory of the top-level project (add_subdirectory(compiler)).
 cmake_minimum_required(VERSION 3.28)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -11,11 +11,27 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_BUILD_TYPE Release)
   endif()
   enable_testing()
+  set(LLACCEL_COMPILER_STANDALONE ON)
+else()
+  set(LLACCEL_COMPILER_STANDALONE OFF)
 endif()
 
 set(LLACCEL_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# Tools end up in <compiler binary dir>/bin (build/cmake/compiler/bin from the
+# top level, build/compiler/bin standalone) — the top-level Makefile expects that.
+set(LLACCEL_COMPILER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
-find_package(MLIR REQUIRED CONFIG)
+# Locate MLIR/LLVM unless the enclosing project already did. Homebrew LLVM is
+# the default location on this machine; override with -DMLIR_DIR/-DLLVM_DIR.
+if(NOT MLIR_FOUND)
+  if(NOT MLIR_DIR AND EXISTS /opt/homebrew/opt/llvm/lib/cmake/mlir)
+    set(MLIR_DIR /opt/homebrew/opt/llvm/lib/cmake/mlir)
+  endif()
+  if(NOT LLVM_DIR AND EXISTS /opt/homebrew/opt/llvm/lib/cmake/llvm)
+    set(LLVM_DIR /opt/homebrew/opt/llvm/lib/cmake/llvm)
+  endif()
+  find_package(MLIR REQUIRED CONFIG)
+endif()
 message(STATUS "llaccel-compiler: MLIR ${MLIR_DIR} (LLVM ${LLVM_PACKAGE_VERSION})")
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}" "${LLVM_CMAKE_DIR}")
@@ -23,6 +39,10 @@ include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
+
+# add_llvm_executable/add_mlir_library honour these when set.
+set(LLVM_RUNTIME_OUTPUT_INTDIR ${LLACCEL_COMPILER_BINARY_DIR}/bin)
+set(LLVM_LIBRARY_OUTPUT_INTDIR ${LLACCEL_COMPILER_BINARY_DIR}/lib)
 
 # Homebrew LLVM ships libMLIR.dylib and sets MLIR_LINK_MLIR_DYLIB=1; the
 # per-component static archives are also present. We link the dylib (via

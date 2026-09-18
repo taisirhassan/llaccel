@@ -4,10 +4,11 @@
 // each consuming two operand bits (MSB first), doubling the partial root and
 // conditionally subtracting the trial value (2*root + 1) from the remainder.
 //
-// Timing: `start` (with `a`) is sampled on a clock edge; 24 iteration cycles
-// follow; `done` pulses for one cycle when `q` is valid (25 cycles after the
-// edge that sampled `start`). `q` holds until the next `start`. `start` is
-// ignored while `busy`.
+// Timing: `start` (with `a`) is sampled on a clock edge E0; the 24 iterations
+// happen on edges E1..E24 and `done` / `q` are registered at E24, so `done` is
+// high for the one cycle that follows E24 (24 cycles after E0; `busy` is high
+// for those 24 cycles). `q` holds until the next `start`. `start` is ignored
+// while `busy`.
 module isqrt (
   input  logic        clk,
   input  logic        rst_n,
@@ -19,18 +20,21 @@ module isqrt (
 );
   // Invariant after each step: rem <= 2*root < 2^25 (25 bits). Before the
   // subtraction the shifted remainder (rem << 2 | 2 bits) is < 2^27 (27 bits).
+  // The trial value is (2*root_new + 1) with root_new = 2*root, i.e. 4*root + 1
+  // in terms of the partial root held in `root` (numerics.h doubles the root
+  // before forming the trial).
   logic [24:0] rem;
   logic [23:0] root;
   logic [47:0] t;        // operand, shifted left by two each iteration
   logic [4:0]  cnt;      // iterations remaining
 
   logic [26:0] rem_sh;   // remainder with the next two operand bits appended
-  logic [26:0] trial;    // (root << 1) | 1, zero-extended
+  logic [26:0] trial;    // (root << 2) | 1, zero-extended
   logic        take;
 
   always_comb begin
     rem_sh = {rem, t[47:46]};
-    trial  = {2'b00, root, 1'b1};
+    trial  = {1'b0, root, 2'b01};
     take   = (trial <= rem_sh);
   end
 

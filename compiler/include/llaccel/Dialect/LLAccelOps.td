@@ -42,7 +42,7 @@ def LLAccel_WeightOp : LLAccel_Op<"weight", [Symbol]> {
                        OptionalAttr<I64Attr>:$exp,
                        OptionalAttr<I64Attr>:$orig_n,
                        OptionalAttr<I64Attr>:$dram_bytes);
-  let assemblyFormat = "$sym_name attr-dict `:` $type";
+  let assemblyFormat = "$sym_name attr-dict `:` custom<WeightType>($type)";
   let extraClassDeclaration = [{
     ::mlir::RankedTensorType getTensorType() { return ::llvm::cast<::mlir::RankedTensorType>(getType()); }
     /// Raw little-endian bytes of the attached data (empty if none).
@@ -54,6 +54,7 @@ def LLAccel_WeightOp : LLAccel_Op<"weight", [Symbol]> {
 def LLAccel_RmsNormOp : LLAccel_Op<"rmsnorm", [Pure, AllTypesMatch<["input", "output"]>]> {
   let summary = "RMSNorm with a gamma weight symbol";
   let arguments = (ins AnyRankedTensor:$input, FlatSymbolRefAttr:$gamma, F64Attr:$eps,
+                       DefaultValuedAttr<I64Attr, "1">:$heads,
                        OptionalAttr<I64Attr>:$eps_t, OptionalAttr<I64Attr>:$C,
                        OptionalAttr<I64Attr>:$sh_post);
   let results = (outs AnyRankedTensor:$output);
@@ -256,7 +257,7 @@ def LLAccel_IsaQuantOp : LLAccel_IsaOp<"quant",
 
 def LLAccel_IsaAttnOp : LLAccel_IsaOp<"attn",
     (ins LLAccel_BufType:$q, I64Attr:$q_off, LLAccel_BufType:$out, I64Attr:$out_off,
-         LLAccel_BufType:$kbase, I64Attr:$kbase_off, LLAccel_BufType:$vbase, I64Attr:$vbase_off,
+         FlatSymbolRefAttr:$kbase, I64Attr:$kbase_off, FlatSymbolRefAttr:$vbase, I64Attr:$vbase_off,
          I64Attr:$M, I64Attr:$H, I64Attr:$Hkv, I64Attr:$D, I64Attr:$kv_stride,
          I64Attr:$Ms, I64Attr:$Ss, I64Attr:$Mo, I64Attr:$So)> {
   let summary = "ATTN";
@@ -267,7 +268,7 @@ def LLAccel_IsaAttnOp : LLAccel_IsaOp<"attn",
 }
 
 def LLAccel_IsaKvWriteOp : LLAccel_IsaOp<"kv_write",
-    (ins LLAccel_BufType:$src, I64Attr:$src_off, LLAccel_BufType:$base, I64Attr:$base_off,
+    (ins LLAccel_BufType:$src, I64Attr:$src_off, FlatSymbolRefAttr:$base, I64Attr:$base_off,
          I64Attr:$M, I64Attr:$Hkv, I64Attr:$D, I64Attr:$kv_stride)> {
   let summary = "KV_WRITE";
   let assemblyFormat = "$src custom<Off>($src_off) `,` $base custom<Off>($base_off) attr-dict";

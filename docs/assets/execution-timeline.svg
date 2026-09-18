@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="580" viewBox="0 0 1080 580" role="img" aria-label="execution-timeline">
+<defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#d4d4d8"/></pattern><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="#52525b" stroke-width="1.5"/></marker></defs>
+<rect width="1080" height="580" fill="white"/><rect width="1080" height="580" fill="url(#grid)"/>
+<g font-family="Helvetica, Arial, sans-serif" fill="#27272a">
+<text x="40" y="40" font-size="15" fill="#52525b">two weight buffers · schematic timing, not measured cycles</text>
+<rect x="30" y="80" width="1020" height="400" rx="4" fill="#fafafa" stroke="#a1a1aa" stroke-dasharray="6 5"/>
+<text x="46" y="105" font-size="14" fill="#52525b">overlapped schedule</text>
+<text x="60" y="191" font-size="16" fill="#52525b">DMA</text>
+<text x="60" y="301" font-size="16" fill="#52525b">GEMM</text>
+<text x="60" y="411" font-size="14" fill="#52525b">buffer reuse</text>
+<path d="M 220 115 L 1000 115" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="950" y="101" font-size="13" fill="#52525b">time →</text>
+<rect x="220" y="150" width="140" height="65" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="290.0" y="178.5" text-anchor="middle" font-size="16" font-weight="600">load 0</text>
+<text x="290.0" y="201.5" text-anchor="middle" font-size="12" fill="#52525b">buffer A</text>
+<rect x="380" y="150" width="140" height="65" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="450.0" y="178.5" text-anchor="middle" font-size="16" font-weight="600">load 1</text>
+<text x="450.0" y="201.5" text-anchor="middle" font-size="12" fill="#52525b">buffer B</text>
+<rect x="580" y="150" width="140" height="65" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="650.0" y="178.5" text-anchor="middle" font-size="16" font-weight="600">load 2</text>
+<text x="650.0" y="201.5" text-anchor="middle" font-size="12" fill="#52525b">buffer A</text>
+<rect x="780" y="150" width="140" height="65" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="850.0" y="178.5" text-anchor="middle" font-size="16" font-weight="600">load 3</text>
+<text x="850.0" y="201.5" text-anchor="middle" font-size="12" fill="#52525b">buffer B</text>
+<rect x="380" y="260" width="180" height="65" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="470.0" y="288.5" text-anchor="middle" font-size="16" font-weight="600">compute 0</text>
+<text x="470.0" y="311.5" text-anchor="middle" font-size="12" fill="#52525b">read A</text>
+<rect x="580" y="260" width="180" height="65" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="670.0" y="288.5" text-anchor="middle" font-size="16" font-weight="600">compute 1</text>
+<text x="670.0" y="311.5" text-anchor="middle" font-size="12" fill="#52525b">read B</text>
+<rect x="780" y="260" width="180" height="65" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="870.0" y="288.5" text-anchor="middle" font-size="16" font-weight="600">compute 2</text>
+<text x="870.0" y="311.5" text-anchor="middle" font-size="12" fill="#52525b">read A</text>
+<path d="M 360 215 L 360 245 L 395 245 L 395 260" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="5 4"/>
+<path d="M 510 215 L 510 240 L 595 240 L 595 260" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="5 4"/>
+<path d="M 710 215 L 710 240 L 795 240 L 795 260" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="5 4"/>
+<path d="M 560 305 L 570 305 L 570 400 L 610 400" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="5 4"/>
+<text x="620" y="405" font-size="13" fill="#52525b">A is free for load 2</text>
+<text x="220" y="445" font-size="13" fill="#52525b">load 1 overlaps compute 0; load 2 overlaps compute 1</text>
+<text x="40" y="525" font-size="13" fill="#52525b">wait for a load before reading its buffer; wait for its reader before overwriting it.</text>
+<text x="40" y="550" font-size="13" fill="#52525b">semaphores enforce dependencies. Actual overlap depends on memory stalls and tile sizes.</text>
+</g></svg>

@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "change": "CLI releases original DRAM image buffer after synchronous upload; Host library semantics unchanged. No peak RSS claim.",
+  "scope": "Completed pretrained campaigns and final full4096 prefill used archived pre-memory-release binary. New binary checked against old Qwen functional output and all counters, tiny boundary RTL/functional, trained RTL and character-tokenizer paths.",
+  "files": {
+    "build/validated-pre-memory-release/llaccel-sim": {
+      "sha256": "055d47610852b4178d990e1dc509382fdc43ae3976ddccf1e1ec013e4130d4e5",
+      "bytes": 1816680
+    },
+    "build/dma32/llaccel-sim": {
+      "sha256": "17d7b91407061359624283d5855503a10869e4df265242c96cc1b37af91c6f43",
+      "bytes": 1816680
+    },
+    "build/validated-pre-memory-release/boundary_launch": {
+      "sha256": "c3d6700fac07374b6b94fc1c42c62fc4c7834243b25f70d87c569659039ba83d",
+      "bytes": 1669488
+    },
+    "build/dma32/boundary_launch": {
+      "sha256": "087f2c898f1f22621e7e27b3b831bc33d20e97f6e506ba0d8f32c200b698a53f",
+      "bytes": 1670176
+    },
+    "work/cli-memory-build.log": {
+      "sha256": "ad6bae6e04b153ffd7c3c6988e28040940b344e020bfe83fbf2e8dc5f2eb6b31",
+      "bytes": 744
+    },
+    "work/memory-old-qwen.json": {
+      "sha256": "17f075d1a70c518e288cdc1e2240f01118dbf213587ed55826ccd6cddb4d1d83",
+      "bytes": 12753096
+    },
+    "work/memory-new-qwen.json": {
+      "sha256": "17f075d1a70c518e288cdc1e2240f01118dbf213587ed55826ccd6cddb4d1d83",
+      "bytes": 12753096
+    },
+    "work/memory-boundary-rtl.json": {
+      "sha256": "6f6c4526b4fda23aff36fad9057015787d1dcb6a822ec5ccc4324061af6b0a09",
+      "bytes": 7671
+    },
+    "work/memory-boundary-func.json": {
+      "sha256": "6c20475c9e4d2a1030e024cfbc78fadf187fdd717576fc1bb3b0df9e1ad46615",
+      "bytes": 7426
+    },
+    "work/memory-trained-rtl.log": {
+      "sha256": "933e8896d18e226459c514f07eb30428537e8ba19f67743f5df95b9d9fc357fb",
+      "bytes": 181
+    },
+    "work/memory-trained-char.log": {
+      "sha256": "a6add7deb5f733d74512925d544845aa3cd00abc190e8fd19cb04225d0b8228c",
+      "bytes": 134
+    }
+  }
+}

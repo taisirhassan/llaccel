@@ -27,6 +27,10 @@ def ensure_dataset(data_dir: Path | None = None) -> Path:
 class CharTokenizer:
     def __init__(self, itos: list[str]) -> None:
         self.itos = list(itos)
+        if not self.itos or any(not isinstance(c, str) or len(c) != 1 for c in self.itos):
+            raise ValueError("character tokenizer requires a nonempty list of single characters")
+        if len(set(self.itos)) != len(self.itos):
+            raise ValueError("character tokenizer contains duplicate characters")
         self.stoi = {c: i for i, c in enumerate(self.itos)}
 
     @classmethod
@@ -66,7 +70,11 @@ def load_corpus(data_dir: Path | None = None) -> tuple[np.ndarray, np.ndarray, C
 
 
 def sample_batch(ids: np.ndarray, batch: int, ctx: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    starts = rng.integers(0, len(ids) - ctx - 1, size=batch)
+    if batch <= 0 or ctx <= 0:
+        raise ValueError("batch and context length must be positive")
+    if len(ids) <= ctx:
+        raise ValueError(f"corpus needs at least context + 1 tokens ({ctx + 1}), got {len(ids)}")
+    starts = rng.integers(0, len(ids) - ctx, size=batch)
     x = np.stack([ids[s : s + ctx] for s in starts])
     y = np.stack([ids[s + 1 : s + ctx + 1] for s in starts])
     return x, y

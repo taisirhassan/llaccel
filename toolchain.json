@@ -1,0 +1,15 @@
+{
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "tools": {
+    "clang": "23.1.1",
+    "llvm-config": "23.1.1",
+    "verilator": "5.052",
+    "cmake": "4.4.3",
+    "ninja": "1.13.2",
+    "uv": "0.12.12"
+  },
+  "python": "3.14.7",
+  "packages": {"torch": "2.14.0", "numpy": "2.5.3"},
+  "homebrew_libraries": {"nlohmann-json": "3.12.0", "lz4": "1.10.0"}
+}

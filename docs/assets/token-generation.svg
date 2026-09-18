@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="680" viewBox="0 0 1080 680" role="img" aria-label="token-generation">
+<defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#d4d4d8"/></pattern><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="#52525b" stroke-width="1.5"/></marker></defs>
+<rect width="1080" height="680" fill="white"/><rect width="1080" height="680" fill="url(#grid)"/>
+<g font-family="Helvetica, Arial, sans-serif" fill="#27272a">
+<rect x="30" y="35" width="1020" height="195" rx="4" fill="#fafafa" stroke="#a1a1aa" stroke-dasharray="6 5"/>
+<text x="46" y="60" font-size="14" fill="#52525b">prefill · process the prompt once</text>
+<rect x="60" y="105" width="180" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="150.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">prompt tokens</text>
+<text x="150.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">host: stage embeddings</text>
+<rect x="310" y="105" width="190" height="70" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="405.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">decoder layers</text>
+<text x="405.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">process prompt chunks</text>
+<rect x="570" y="105" width="180" height="70" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="660.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">output projection</text>
+<text x="660.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">last prompt position</text>
+<rect x="820" y="105" width="200" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="920.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">first new token</text>
+<text x="920.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">host: argmax</text>
+<path d="M 240 140 L 310 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 500 140 L 570 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 750 140 L 820 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="30" y="280" width="1020" height="280" rx="4" fill="#fafafa" stroke="#a1a1aa" stroke-dasharray="6 5"/>
+<text x="46" y="305" font-size="14" fill="#52525b">decode · repeat for each new token</text>
+<rect x="60" y="350" width="180" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="150.0" y="381.0" text-anchor="middle" font-size="16" font-weight="600">token embedding</text>
+<text x="150.0" y="404.0" text-anchor="middle" font-size="12" fill="#52525b">host: stage one row</text>
+<rect x="310" y="350" width="190" height="70" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="405.0" y="381.0" text-anchor="middle" font-size="16" font-weight="600">decoder layers</text>
+<text x="405.0" y="404.0" text-anchor="middle" font-size="12" fill="#52525b">process one position</text>
+<rect x="570" y="350" width="180" height="70" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="660.0" y="381.0" text-anchor="middle" font-size="16" font-weight="600">output projection</text>
+<text x="660.0" y="404.0" text-anchor="middle" font-size="12" fill="#52525b">next-token logits</text>
+<rect x="820" y="350" width="200" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="920.0" y="381.0" text-anchor="middle" font-size="16" font-weight="600">next token</text>
+<text x="920.0" y="404.0" text-anchor="middle" font-size="12" fill="#52525b">host: argmax</text>
+<path d="M 920 175 L 920 250 L 270 250 L 270 330 L 150 330 L 150 350" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 240 385 L 310 385" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 500 385 L 570 385" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 750 385 L 820 385" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 920 420 L 920 510 L 150 510 L 150 420" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="410" y="495" font-size="13" fill="#52525b">continue until the stop condition</text>
+<rect x="210" y="605" width="660" height="50" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="540.0" y="635.0" text-anchor="middle" font-size="16" font-weight="600">per layer: Q/K/V → RoPE → write KV → attention → feed-forward</text>
+<text x="260" y="590" font-size="13" fill="#52525b">KV stays in DRAM between steps; attention includes the current position</text>
+</g></svg>

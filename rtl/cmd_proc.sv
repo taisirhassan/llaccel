@@ -74,14 +74,16 @@ module cmd_proc
   // ---- fetch -------------------------------------------------------------------------------
   logic [31:0] pc;
   logic [2:0]  outstanding, discard;
-  logic        halt_seen;
+  logic        halt_seen, fetch_held;
   logic        pf_push, pf_pop, pf_full, pf_empty;
   logic [INSTR_W-1:0] pf_out;
   logic [$clog2(PREFETCH+1)-1:0] pf_count;
   logic        fetch_accept, rsp_is_halt, rsp_keep;
 
-  assign fetch_req_valid = (state == CP_RUN) && !halt_seen &&
-                           ({1'b0, pf_count} + {1'b0, outstanding} < 4'(PREFETCH));
+  // Once presented, a fetch remains valid until accepted even if a previously
+  // issued HALT returns meanwhile. dram_arb may already be holding this owner.
+  assign fetch_req_valid = fetch_held || ((state == CP_RUN) && !halt_seen &&
+                           ({1'b0, pf_count} + {1'b0, outstanding} < 4'(PREFETCH)));
   assign fetch_req_addr  = pc;
   assign fetch_accept    = fetch_req_valid && fetch_req_ready;
   assign rsp_keep        = fetch_rsp_valid && (discard == 3'd0);
@@ -162,18 +164,19 @@ module cmd_proc
   logic cp_signal;
   assign cp_signal = issue && (eng == ENG_CP) && (ssem != NO_SEM);
 
-  always_ff @(posedge clk) begin
-    for (int unsigned s = 0; s < NSEM; s++) begin
-      if (!rst_n || start) begin
-        sem[s] <= '0;
-      end else begin
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int unsigned s = 0; s < NSEM; s++) sem[s] <= '0;
+    end else begin
+      for (int unsigned s = 0; s < NSEM; s++) begin
         logic [2:0] inc;
         inc = {2'd0, dma_done_pulse  && (dma_done_sig_sem  == 8'(s))} +
               {2'd0, gemm_done_pulse && (gemm_done_sig_sem == 8'(s))} +
               {2'd0, vec_done_pulse  && (vec_done_sig_sem  == 8'(s))} +
               {2'd0, attn_done_pulse && (attn_done_sig_sem == 8'(s))} +
               {2'd0, cp_signal && (ssem == 8'(s))};
-        sem[s] <= sem[s] + {29'd0, inc};
+        if (start) sem[s] <= '0;
+        else       sem[s] <= sem[s] + {29'd0, inc};
       end
     end
   end
@@ -181,15 +184,16 @@ module cmd_proc
   // ---- control -----------------------------------------------------------------------------------
   logic all_idle;
   assign all_idle = q_empty[0] && q_empty[1] && q_empty[2] && q_empty[3] &&
-                    !dma_busy && !gemm_busy && !vec_busy && !attn_busy && (outstanding == 3'd0);
+                    !dma_busy && !gemm_busy && !vec_busy && !attn_busy && !fetch_held && (outstanding == 3'd0);
 
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state       <= CP_IDLE;
       pc          <= '0;
       outstanding <= '0;
       discard     <= '0;
       halt_seen   <= 1'b0;
+      fetch_held  <= 1'b0;
       done        <= 1'b0;
     end else if (start) begin
       state       <= CP_RUN;
@@ -197,8 +201,12 @@ module cmd_proc
       outstanding <= '0;
       discard     <= '0;
       halt_seen   <= 1'b0;
+      fetch_held  <= 1'b0;
       done        <= 1'b0;
     end else begin
+      // Track only an unaccepted presented request. Its PC is stable because
+      // PC advances exclusively on acceptance.
+      if (fetch_req_valid) fetch_held <= !fetch_req_ready;
       // fetch bookkeeping
       if (fetch_accept) pc <= pc + 32'd64;
       case ({fetch_accept, fetch_rsp_valid})
@@ -206,7 +214,13 @@ module cmd_proc
         2'b01:   outstanding <= outstanding - 3'd1;
         default: ;
       endcase
-      if (fetch_rsp_valid && discard != 3'd0) discard <= discard - 3'd1;
+      // A held request can be accepted after HALT has already been observed.
+      // Count that response for discard too; simultaneous accept/return cancel.
+      case ({halt_seen && fetch_accept, fetch_rsp_valid && discard != 3'd0})
+        2'b10: discard <= discard + 3'd1;
+        2'b01: discard <= discard - 3'd1;
+        default: ;
+      endcase
       if (rsp_keep && rsp_is_halt) begin
         halt_seen <= 1'b1;
         discard   <= outstanding - 3'd1 + {2'd0, fetch_accept};   // everything issued after the HALT

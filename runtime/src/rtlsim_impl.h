@@ -1,5 +1,4 @@
-// Verilated-RTL backend, templated on the Verilator top class so the v1 and v2
-// hardware variants (EPILOGUE_FUSION = 0 / 1) can both be linked into one binary.
+// Verilator backend template; links v1/v2 (EPILOGUE_FUSION = 0/1) together.
 #pragma once
 #include <cstdio>
 #include <cstring>
@@ -43,6 +42,7 @@ class RtlSim final : public Device {
     top_->final();
   }
   std::string name() const override { return std::string("Verilated RTL (") + variant_ + ")"; }
+  uint32_t maxAttentionHeadDim() const override { return 256; }
   void dramWrite(uint64_t addr, const void* src, uint64_t n) override { dram_.write(addr, src, n); }
   void dramRead(uint64_t addr, void* dst, uint64_t n) const override { dram_.read(addr, dst, n); }
   uint64_t dramSize() const override { return dram_.size(); }
@@ -65,17 +65,21 @@ class RtlSim final : public Device {
   }
 
  private:
-  // One clock cycle: rising edge, then service the DRAM model, then falling edge.
+  // one clock cycle: rising edge, then service the DRAM model, then falling edge.
   void cycle() {
-    top_->clk = 1;
+    top_->clk = 0;
     top_->eval();
-    // Request handshake as seen by the DUT at this edge: valid && ready (ready was driven last cycle).
+    // request handshake as seen by the DUT at this edge: valid && ready (ready was driven last cycle).
     // wstrb is 64 bits -> a plain uint64_t in Verilator; wdata is 512 bits -> VlWide.
     uint64_t wstrb = top_->dram_req_wstrb;
     bool accepted = dram_.request(top_->dram_req_valid && top_->dram_req_ready, top_->dram_req_we, top_->dram_req_addr,
                                   reinterpret_cast<const uint8_t*>(top_->dram_req_wdata.data()),
                                   reinterpret_cast<const uint8_t*>(&wstrb));
     (void)accepted;
+    top_->clk = 1;
+    top_->eval();
+    if (fst_) fst_->dump(ctx_->time());
+    ctx_->timeInc(1);
     uint8_t rdata[64];
     bool rsp = dram_.tick(rdata);
     top_->dram_rsp_valid = rsp;
@@ -83,7 +87,8 @@ class RtlSim final : public Device {
     top_->dram_req_ready = dram_.reqReady();
     top_->clk = 0;
     top_->eval();
-    if (fst_) { fst_->dump(ctx_->time()); ctx_->timeInc(1); }
+    if (fst_) fst_->dump(ctx_->time());
+    ctx_->timeInc(1);
   }
 
   DeviceOptions opt_;

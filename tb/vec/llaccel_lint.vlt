@@ -1,0 +1,15 @@
+`verilator_config
+// Lint waivers for the standalone engine lints (tb/vec, tb/attn). Only the two
+// shared package files are waived; no engine RTL is.
+//  * llaccel_pkg.sv defines every device constant, perf index and ISA field
+//    accessor. Each engine references a subset, so UNUSEDPARAM on the package
+//    scope is expected whenever one engine is linted on its own (Verilator
+//    reports the package's unused items against the engine that imports it).
+//    UNUSEDSIGNAL on the package's function arguments is inherent to the
+//    accessors' contract: instr_* take the whole 512-bit instruction and
+//    return one field; mulshift64 forms an 80-bit product and keeps 64 bits.
+//  * llaccel_luts.svh (generated) carries the SiLU table and the two exp
+//    tables; vec_engine uses the former, attn_engine the latter two.
+lint_off -rule UNUSEDPARAM  -file "*llaccel_pkg.sv"
+lint_off -rule UNUSEDSIGNAL -file "*llaccel_pkg.sv" -match "*function variable*"
+lint_off -rule UNUSEDPARAM  -file "*llaccel_luts.svh"

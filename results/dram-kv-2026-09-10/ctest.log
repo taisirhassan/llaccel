@@ -1,0 +1,21 @@
+Test project /Users/taisirhassan/Documents/Coding/llaccel/build/dma32
+    Start 1: numerics_selftest
+1/8 Test #1: numerics_selftest .......................   Passed    0.02 sec
+    Start 2: runtime_selftest
+2/8 Test #2: runtime_selftest ........................   Passed    0.03 sec
+    Start 3: llbin_selftest
+3/8 Test #3: llbin_selftest ..........................   Passed    0.04 sec
+    Start 4: dram_kv_selftest
+4/8 Test #4: dram_kv_selftest ........................   Passed    0.05 sec
+    Start 5: llaccel-compiler-regressions
+5/8 Test #5: llaccel-compiler-regressions ............   Passed    3.68 sec
+    Start 6: llaccel-compiler-streaming
+6/8 Test #6: llaccel-compiler-streaming ..............   Passed    4.36 sec
+    Start 7: llaccel-compiler-streaming-functional
+7/8 Test #7: llaccel-compiler-streaming-functional ...   Passed    6.86 sec
+    Start 8: llaccel-compiler-dram-kv
+8/8 Test #8: llaccel-compiler-dram-kv ................   Passed    0.44 sec
+
+100% tests passed out of 8
+
+Total Test time (real) =  15.70 sec

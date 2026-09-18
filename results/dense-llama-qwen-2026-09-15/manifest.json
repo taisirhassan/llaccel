@@ -1,0 +1,34 @@
+{
+  "status": "PASS_BOUNDED_SOFTWARE_CONFORMANCE",
+  "generated_utc": "2026-09-15T04:17:47.334504+00:00",
+  "models": "Dense model_type llama, qwen2 and qwen3 within documented operation/capacity limits",
+  "hardware_tests_run": false,
+  "rtl_extended": false,
+  "rtl_max_head_dim": 64,
+  "software_max_head_dim": 256,
+  "inputs": {
+    "work/dense-support/results.json": {
+      "sha256": "cb52d07fa6d33cb2bb6c40c3ede052ead93a4eb34de7f3b584563b9dc663a79d",
+      "bytes": 104549
+    },
+    "work/dense-boundary/results.json": {
+      "sha256": "ee274fe98681e7b770eaf439778886c590628c8d5316219a15c009e31cc88164",
+      "bytes": 1331
+    },
+    "work/llama-qwen-python-tests.log": {
+      "sha256": "dcf289ff974ae3b72fa9e75c5a0a8d88e298d850876bb30b743f8e4b42c505dc",
+      "bytes": 420
+    },
+    "build/llama-qwen-software/software-ctest.log": {
+      "sha256": "cf330331f4294e6e144ee05ebf6a64df829c9a2ce841f6936d555cb07bc91ef5",
+      "bytes": 1165
+    }
+  },
+  "source_manifest_sha256": "0ddde313fa032e9dea88998da7f57f5dbc42c3ba21878debe8783eabb9a604e1",
+  "limits": [
+    "Seeded tiny checkpoints, not new pretrained quality evidence",
+    "No universal all-checkpoint-size/context claim",
+    "D128/256 rejected on current RTL backend before upload",
+    "Dynamic RoPE, active sliding windows, MoE and multimodal models remain unsupported"
+  ]
+}

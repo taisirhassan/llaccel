@@ -82,20 +82,25 @@ def compare_sim(sim_path: Path, golden_path: Path) -> tuple[bool, str]:
         sim = json.load(f)
     with open(golden_path) as f:
         gold = json.load(f)
-    for key in ("argmax_per_step", "generated"):
-        a, b = sim.get(key), gold.get(key)
-        if a is None:
-            return False, f"MISMATCH: sim.json lacks {key!r}"
-        n = min(len(a), len(b))
-        for i in range(n):
-            if int(a[i]) != int(b[i]):
-                return False, f"MISMATCH in {key} at step {i}: sim={a[i]} golden={b[i]}"
+    for owner, record in (("sim", sim), ("golden", gold)):
+        for key in ("argmax_per_step", "generated", "logits_last_rows"):
+            if not isinstance(record.get(key), list):
+                return False, f"MISMATCH: {owner}.json lacks an array {key!r}"
+        if len(record["logits_last_rows"]) != len(record["argmax_per_step"]):
+            return False, f"MISMATCH: {owner}.json logits/launch counts differ"
+        if any(type(x) is not int for key in ("argmax_per_step", "generated") for x in record[key]):
+            return False, f"MISMATCH: {owner}.json token IDs must be integers"
+        if any(not isinstance(row, list) or not row or any(type(x) is not int for x in row)
+               for row in record["logits_last_rows"]):
+            return False, f"MISMATCH: {owner}.json logits must be nonempty integer rows"
+    for key in ("argmax_per_step", "generated", "logits_last_rows"):
+        a, b = sim[key], gold[key]
         if len(a) != len(b):
-            return False, f"MISMATCH: {key} length sim={len(a)} golden={len(b)} (first {n} equal)"
-    if "logits_last_rows" in sim and "logits_last_rows" in gold:
-        for i, (a, b) in enumerate(zip(sim["logits_last_rows"], gold["logits_last_rows"])):
-            if list(map(int, a)) != list(map(int, b)):
-                return False, f"MISMATCH in logits_last_rows at step {i} (argmax agreed)"
+            return False, f"MISMATCH: {key} length sim={len(a)} golden={len(b)}"
+        for i, (left, right) in enumerate(zip(a, b)):
+            if left != right:
+                return False, f"MISMATCH in {key} at step {i}: sim={left} golden={right}"
+
     return True, f"MATCH: {len(gold['generated'])} tokens, {len(gold['argmax_per_step'])} steps identical"
 
 

@@ -36,9 +36,11 @@ struct GenerationResult {
 
 class Host {
  public:
+  Host(const Llbin& bin, Device& dev);
   Host(const Llbin& bin, Device& dev, const Tokenizer& tok);
   // Runs chunked prefill on `prompt` followed by `nTokens` greedy decode steps.
   GenerationResult generate(const std::string& prompt, uint32_t nTokens, bool verbose);
+  GenerationResult generateTokens(const std::vector<uint32_t>& prompt, uint32_t nTokens, bool verbose);
   uint32_t vocab() const { return vocab_; }
   uint32_t dim() const { return dim_; }
 
@@ -49,10 +51,13 @@ class Host {
 
   const Llbin& bin_;
   Device& dev_;
-  const Tokenizer& tok_;
+  const Tokenizer* tok_ = nullptr;
   uint32_t vocab_, dim_, maxSeq_, prefillM_;
   uint64_t embAddr_, embRowBytes_, inAddr_, inRowBytes_, lgAddr_, lgRowBytes_;
 };
+
+// Read externally tokenized prompt IDs; rejects non-integer or out-of-range JSON values.
+std::vector<uint32_t> loadPromptIds(const std::string& path);
 
 // Compare a generation against golden.json (python -m llaccel.golden). Returns true on match; prints details.
 bool verifyAgainstGolden(const GenerationResult& r, const std::string& goldenPath, bool verbose);

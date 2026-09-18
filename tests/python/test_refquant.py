@@ -184,9 +184,16 @@ def test_qgraph_schema_and_policies(qgraphs, tiny_export):
     assert t["rope_cos"]["shape"] == [64, 8] and t["l0_wk"]["shape"] == [16, 32] and t["l0_wk.rq"] == {"dtype": "rq", "shape": [16], "offset": t["l0_wk.rq"]["offset"]}
     assert t["l0_bq"]["dtype"] == "i32" and t["l0_attn_norm"]["dtype"] == "i16" and "exp" in t["l0_attn_norm"]
     assert all(v["offset"] % 64 == 0 for v in t.values())
-    # E_RES is the max over residual tensors and their addends; every one of them is at E_RES
-    res = ["input"] + [f"l{i}.{n}" for i in range(2) for n in ("x1", "x2", "o", "d")]
-    assert m["E_RES"] == max(Q.i16_exponent(calib[n]) for n in res) and all(q1["exps"][n] == m["E_RES"] for n in res)
+    # Input precision is independent of later residual outliers. Each branch
+    # reserves its own ADD's headroom and propagates the resulting exponent.
+    assert m["E_RES"] == Q.i16_exponent(calib["input"]) == q1["exps"]["input"]
+    previous = "input"
+    for i in range(2):
+        for branch, out in ((f"l{i}.o", f"l{i}.x1"), (f"l{i}.d", f"l{i}.x2")):
+            expected = max(Q.i16_exponent(calib[branch]), Q.i16_exponent(calib[out]),
+                           Q.i16_exponent(calib[previous]), q1["exps"][previous])
+            assert q1["exps"][branch] == q1["exps"][out] == expected
+            previous = out
     assert m["E_LOGIT"] == Q.i16_exponent(calib["logits"]) == q1["exps"]["logits"]
     # rope preserves the exponent; quant inserted before every i16-input linear and before the kv write
     for i in range(2):
@@ -210,17 +217,24 @@ def test_qgraph_schema_and_policies(qgraphs, tiny_export):
         elif o["op"] == "rmsnorm":
             assert set(o) == {"op", "in", "gamma", "out", "K", "eps_t", "C", "sh_post"} and o["C"] < 2**32
         elif o["op"] == "attention":
-            assert set(o) == {"op", "q", "layer", "out", "H", "Hkv", "D", "Ms", "Ss", "Mo", "So"} and o["q"].endswith(".qr.q")
+            assert set(o) == {"op", "q", "layer", "out", "H", "Hkv", "D", "Ms", "Ss", "Mo", "So", "prob_bits"} and o["q"].endswith(".qr.q")
+            assert o["prob_bits"] == 15
         elif o["op"] == "kv_write":
             assert set(o) == {"op", "layer", "k", "v", "Hkv", "D"} and o["k"].endswith(".kr.q") and o["v"].endswith(".v")
         elif o["op"] == "add":
-            assert o["sh_b"] == 0
+            assert o["sh_b"] == q1["exps"][o["a"]] - q1["exps"][o["b"]] >= 0
+            assert q1["exps"][o["out"]] == q1["exps"][o["a"]]
     # v2: fused forms replace add/silu/mul; the requant of the fused linear targets the pre-epilogue exponent
     k2 = [o["op"] for o in q2["ops"]]
-    assert "add" not in k2 and "silu" not in k2 and "mul" not in k2 and k2.count("linear") == kinds.count("linear")
+    assert "silu" not in k2 and "mul" not in k2 and k2.count("linear") == kinds.count("linear")
     fused = {o["out"]: o for o in q2["ops"] if o["op"] == "linear" and o["epilogue"] != "none"}
-    assert set(fused) == {f"l{i}.{n}" for i in range(2) for n in ("x1", "x2", "sg", "f")}
-    assert fused["l0.x1"]["aux"] == "input" and fused["l1.x1"]["aux"] == "l0.x2" and fused["l0.x2"]["aux"] == "l0.x1"
+    eligible_adds = {o["out"] for o in ops if o["op"] == "add" and o["sh_b"] == 0}
+    shifted_adds = {o["out"] for o in ops if o["op"] == "add" and o["sh_b"] != 0}
+    assert set(fused) == eligible_adds | {f"l{i}.{n}" for i in range(2) for n in ("sg", "f")}
+    assert {o["out"] for o in q2["ops"] if o["op"] == "add"} == shifted_adds
+    for out in eligible_adds:
+        assert fused[out]["epilogue"] == "resadd"
+        assert q2["exps"][fused[out]["aux"]] == q2["exps"][out]
     s1 = next(o for o in ops if o["op"] == "silu" and o["out"] == "l0.sg")
     assert fused["l0.sg"]["silu"] == {"Mi": s1["Mi"], "Si": s1["Si"], "sh_out": s1["sh_out"]}
     m1 = next(o for o in ops if o["op"] == "mul" and o["out"] == "l0.f")
@@ -234,3 +248,45 @@ def test_refquant_cli(tiny_export, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "fusion=True" in out and (tmp_path / "q" / "qgraph.json").exists()
     assert json.loads((tmp_path / "q" / "qgraph.json").read_text())["fusion"] is True
+
+
+def test_late_residual_outlier_preserves_embedding_and_blocks_shifted_fusion(tiny_export):
+    cfg, weights, calib = Q.load_export(tiny_export[0])
+    calib = dict(calib)
+    calib["input"] = 0.01
+    for layer in range(cfg["n_layers"]):
+        for name in ("o", "d", "x1", "x2"):
+            calib[f"l{layer}.{name}"] = 0.02
+    calib["l1.d"] = calib["l1.x2"] = 1024.0
+    weights = dict(weights)
+    weights["embed"] = np.full_like(weights["embed"], 0.01)
+    quantizers = [Q.RefQuantizer(cfg, weights, calib, fusion) for fusion in (False, True)]
+    graphs = [quantizer.run() for quantizer in quantizers]
+    assert quantizers[0].blob.bytes() == quantizers[1].blob.bytes()
+    for quantizer, graph in zip(quantizers, graphs):
+        assert graph["model"]["E_RES"] == graph["exps"]["input"] == -15
+        assert graph["exps"]["l0.x1"] == graph["exps"]["l0.x2"] == -15
+        assert graph["exps"]["l1.x2"] == -4
+        offset = graph["tensors"]["embed"]["offset"]
+        embed = np.frombuffer(quantizer.blob.bytes(), dtype="<i2", count=weights["embed"].size, offset=offset)
+        assert np.all(embed == 328)
+        late_add = next(op for op in graph["ops"] if op["op"] == "add" and op["out"] == "l1.x2")
+        assert (late_add["a"], late_add["b"], late_add["sh_b"]) == ("l1.d", "l1.x1", 11)
+        assert not any(op.get("epilogue") == "resadd" and op["out"] == "l1.x2" for op in graph["ops"])
+
+
+def test_rmsnorm_minimum_row_stat_prevents_reciprocal_saturation():
+    args = (896, 1e-6, -10, -14, -10, 100.0, "quiet")
+    old = Q.rmsnorm_params(*args)
+    new = Q.rmsnorm_params(*args, rms_min=0.1)
+    assert new["C"] < old["C"]
+    x = np.full((1, 896), 102, dtype=np.int64)
+    gamma = np.full(896, 16384, dtype=np.int64)
+    y = G.rmsnorm(x, gamma, new["eps_t"], new["C"], new["sh_post"])
+    value = 102 / 1024
+    expected = value / math.sqrt(value * value + 1e-6)
+    assert np.max(np.abs(y / 1024 - expected)) < 0.002
+    for invalid in (-1.0, 101.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="rms_min"):
+            Q.rmsnorm_params(*args, rms_min=invalid)
+    assert Q.rmsnorm_params(*args, rms_min=0.0)["C"] > 0

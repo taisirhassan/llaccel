@@ -1,0 +1,222 @@
+[
+  {
+    "model": "llama-head128",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-head128",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-head128",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-head128",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-head256",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-head256",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-head256",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-head256",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-linear",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-linear",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-linear",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-linear",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-tied-bias",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-tied-bias",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-tied-bias",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-tied-bias",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-untied",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-untied",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama-untied",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama-untied",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama3-rope",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama3-rope",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "llama3-rope",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "llama3-rope",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-tied-linear",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-tied-linear",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-tied-linear",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-tied-linear",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-untied",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-untied",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-untied",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-untied",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-yarn",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-yarn",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen2-yarn",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen2-yarn",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen3-independent-width",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen3-independent-width",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen3-independent-width",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen3-independent-width",
+    "variant": "v2-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen3-qknorm",
+    "variant": "v1-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen3-qknorm",
+    "variant": "v1-overlap",
+    "passed": true
+  },
+  {
+    "model": "qwen3-qknorm",
+    "variant": "v2-inorder",
+    "passed": true
+  },
+  {
+    "model": "qwen3-qknorm",
+    "variant": "v2-overlap",
+    "passed": true
+  }
+]

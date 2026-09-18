@@ -1,0 +1,146 @@
+{
+  "cases": [
+    {
+      "context": 1024,
+      "prompt": 257,
+      "tokens": 2,
+      "backend": "func",
+      "seed": 0,
+      "launches": 19,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 257,
+      "tokens": 2,
+      "backend": "func",
+      "seed": 7,
+      "launches": 19,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 257,
+      "tokens": 2,
+      "backend": "rtl",
+      "seed": 0,
+      "launches": 19,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1023,
+      "tokens": 1,
+      "backend": "func",
+      "seed": 0,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1023,
+      "tokens": 1,
+      "backend": "func",
+      "seed": 7,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1023,
+      "tokens": 1,
+      "backend": "rtl",
+      "seed": 0,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1024,
+      "tokens": 0,
+      "backend": "func",
+      "seed": 0,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1024,
+      "tokens": 0,
+      "backend": "func",
+      "seed": 7,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 1024,
+      "prompt": 1024,
+      "tokens": 0,
+      "backend": "rtl",
+      "seed": 0,
+      "launches": 64,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4095,
+      "tokens": 1,
+      "backend": "func",
+      "seed": 0,
+      "launches": 256,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4095,
+      "tokens": 1,
+      "backend": "func",
+      "seed": 7,
+      "launches": 256,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4095,
+      "tokens": 1,
+      "backend": "rtl",
+      "seed": 0,
+      "launches": 256,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4096,
+      "tokens": 0,
+      "backend": "func",
+      "seed": 0,
+      "launches": 256,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4096,
+      "tokens": 0,
+      "backend": "func",
+      "seed": 7,
+      "launches": 256,
+      "result": "MATCH"
+    },
+    {
+      "context": 4096,
+      "prompt": 4096,
+      "tokens": 0,
+      "backend": "rtl",
+      "seed": 0,
+      "launches": 256,
+      "result": "MATCH"
+    }
+  ],
+  "binary_scope": "Final context4096/prompt4096/tokens0 RTL case ran the current repaired command processor; earlier campaign RTL processes began before that rebuild. Do not attribute every row to one simulator hash.",
+  "final_current_case": {
+    "build/dram-kv-context-rtl/context-4096/p4096-t0-rtl-0.log": "de4bacd56fe2cd793e9ae7857dba14e07b2a601b36e8d1c393fb1a13cf2df84b",
+    "build/dram-kv-context-rtl/context-4096/p4096-t0-golden.json": "c6481a9e06c0f0b879213d1a310f52eebb5771e63afeebf8ab00b7acfc604b4e",
+    "build/dram-kv-context-rtl/context-4096/model.llbin": "7730db6ee702a9e5820faa82f729e76b92872c93895fbb1d4fa5e5622139b602",
+    "build/validated-pre-memory-release/llaccel-sim": "055d47610852b4178d990e1dc509382fdc43ae3976ddccf1e1ec013e4130d4e5"
+  }
+}

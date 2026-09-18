@@ -1,0 +1,59 @@
+{
+  "status": "PASS",
+  "meaning": "same-cohort provenance verified; no numerical pass threshold",
+  "no_further_tuning": true,
+  "protocol": {
+    "split": "TEST",
+    "token_offset": 8192,
+    "sampling": "uniform",
+    "scored_tokens": 4096,
+    "window_length": 32
+  },
+  "same_window_starts_and_token_ids": true,
+  "same_checkpoint_tokenizer_and_text_hashes": true,
+  "frozen_selected_qgraph_hashes_match": true,
+  "report_sha256": {
+    "work/numerics/qwen-confirmation-original.json": "2fd165c33671ea862107da893e79a3f86b2dfa2665f7cda5a85fd152cd0852f9",
+    "work/numerics/qwen-confirmation-selected.json": "50c7b5eb7f4719835f6b7b7cc6521fd671c8df5ff7f17b76bd272d6a8ef6bd8f",
+    "work/numerics/qwen-independent/selection.json": "96e78835c52afe51782f985884102e0bb1e852e8a270fe8ed43373def6e62d10"
+  },
+  "original": {
+    "scored_tokens": 4096,
+    "top1_agreement": 0.60107421875,
+    "mean_cosine": 0.9143906184889855,
+    "integer_cross_entropy_nats": 4.7667592843005755,
+    "integer_perplexity": 117.53771776162004,
+    "fp32_cross_entropy_nats": 4.198063324857133,
+    "fp32_perplexity": 66.55730626109899,
+    "cross_entropy_delta_nats": 0.5686959594434429
+  },
+  "selected": {
+    "scored_tokens": 4096,
+    "top1_agreement": 0.7626953125,
+    "mean_cosine": 0.9753333939326605,
+    "integer_cross_entropy_nats": 4.35910082436824,
+    "integer_perplexity": 78.18679914142426,
+    "fp32_cross_entropy_nats": 4.198063324857133,
+    "fp32_perplexity": 66.55730626109899,
+    "cross_entropy_delta_nats": 0.16103749951110746
+  },
+  "improvement_observed": true,
+  "excess_ce_reduction_nats": 0.4076584599323354,
+  "excess_ce_reduction_fraction": 0.7168302379557829,
+  "original_perplexity_penalty_fraction": 0.7659626623188291,
+  "selected_perplexity_penalty_fraction": 0.17472901975184654,
+  "frozen_original_qgraph_hashes_match": true,
+  "reference_batch_windows": {
+    "original": 1,
+    "selected": 16
+  },
+  "selected_thread_environment": {
+    "OPENBLAS_NUM_THREADS": "2",
+    "OMP_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2",
+    "VECLIB_MAXIMUM_THREADS": "2",
+    "NUMEXPR_NUM_THREADS": "2"
+  },
+  "selected_torch_threads": 2,
+  "controller_sha256": "9806799db982cd4316b237705607a7646ae5d89c005df06a09606387b197eb67"
+}

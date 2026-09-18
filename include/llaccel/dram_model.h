@@ -21,8 +21,8 @@ class DramModel {
   uint8_t* data() { return mem_.data(); }
   const uint8_t* data() const { return mem_.data(); }
 
-  void write(uint64_t addr, const void* src, uint64_t n) { check(addr, n); std::memcpy(&mem_[addr], src, n); }
-  void read(uint64_t addr, void* dst, uint64_t n) const { check(addr, n); std::memcpy(dst, &mem_[addr], n); }
+  void write(uint64_t addr, const void* src, uint64_t n) { check(addr, n); std::memcpy(mem_.data() + addr, src, n); }
+  void read(uint64_t addr, void* dst, uint64_t n) const { check(addr, n); std::memcpy(dst, mem_.data() + addr, n); }
 
   // ---- cycle interface ----
   bool reqReady() const { return pending_.size() < maxOut_; }
@@ -39,7 +39,7 @@ class DramModel {
     } else {
       Pending p;
       p.readyAt = cycle_ + latency_;
-      std::memcpy(p.data, &mem_[addr], 64);
+      std::memcpy(p.data, mem_.data() + addr, 64);
       pending_.push_back(p);
       rdBytes_ += 64;
     }
@@ -65,7 +65,7 @@ class DramModel {
  private:
   struct Pending { uint64_t readyAt; uint8_t data[64]; };
   void check(uint64_t addr, uint64_t n) const {
-    if (addr + n > mem_.size()) throw std::runtime_error("DRAM access out of range");
+    if (addr > mem_.size() || n > mem_.size() - addr) throw std::runtime_error("DRAM access out of range");
   }
   std::vector<uint8_t> mem_;
   uint32_t latency_, maxOut_;

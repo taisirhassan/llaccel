@@ -1,0 +1,7 @@
+{
+  "status": "RESTORED",
+  "qweights_sha256": "d26ca32bbf3d8622ed1466120292966b6d326bea34f745f248595d44bd9df10c",
+  "compiled_image_sha256": "a6f3da37817dec3e7bf8622d899bc70c040f2ac8615fe5bbd78b0f05019cdfd3",
+  "graph_sha256": "98c95721c755c41d01d1f230a4eed97fb0a31ef7701a3c3321b39508eeb2bd3a",
+  "exact_original_image_and_graph": true
+}

@@ -1,0 +1,81 @@
+{
+  "status": "IMPLEMENTED_UNVERIFIED",
+  "generated_utc": "2026-09-15T04:33:14.911361+00:00",
+  "scope": "D128/256 RTL attention and RoPE source extension; backend capability declaration and unexecuted future harness coverage",
+  "rtl_max_head_dim": 256,
+  "physical_mac_lanes": 64,
+  "dram_beat_bytes": 64,
+  "wide_row_piece_bytes": 16,
+  "wide_rows_serialized": true,
+  "wide_dram_read_overfetch_factor": 4,
+  "validation": {
+    "static_source_review": true,
+    "build_run": false,
+    "lint_run": false,
+    "simulation_run": false,
+    "synthesis_run": false,
+    "physical_run": false,
+    "testbenches_executed": false
+  },
+  "existing_binaries_rebuilt": false,
+  "remaining_limits": [
+    "Resident RoPE table SRAM allocation still limits large-head context",
+    "32-bit DRAM image addressing remains",
+    "No new RTL conformance, area, timing or performance evidence"
+  ],
+  "prior_software_evidence": "results/dense-llama-qwen-2026-09-15/manifest.json",
+  "files": {
+    "rtl/attn_engine.sv": {
+      "sha256": "45f0cd9e04c9017b1efda91ca01a2602e5e498284bbf86951dfaffc4535ee8bf",
+      "bytes": 31910
+    },
+    "rtl/vec_engine.sv": {
+      "sha256": "8eceaacfa9d5454e2a1ed0917e5be1eb9b7c5d0bcbcbdcd79293ecb77fbc6abd",
+      "bytes": 31323
+    },
+    "rtl/dram_arb.sv": {
+      "sha256": "c46ac6e231d6df78ec648f7871ea8557b441aaaa4157126cc2d3e825d40d839c",
+      "bytes": 3953
+    },
+    "runtime/src/rtlsim_impl.h": {
+      "sha256": "807fe2a294a640aefe20a461c93f948a05acbc3b08a1ef9ecbb9123e49e1d714",
+      "bytes": 3726
+    },
+    "runtime/include/llaccel/device.h": {
+      "sha256": "ec28c9ae5b26cbf6e67c2cf56f0fce32658d3ebcc21b65472a86ca0c223d70a3",
+      "bytes": 1672
+    },
+    "runtime/src/host.cpp": {
+      "sha256": "ee5a7ed61afa13f707aa576aa0fd7023ad6b259f463adbcc3ee048ab8ac51113",
+      "bytes": 14313
+    },
+    "python/llaccel/hf_support.py": {
+      "sha256": "6ee17d7c2ba78c17751e49182484a7da29570833581da7f58e43e5c5e0943e62",
+      "bytes": 1978
+    },
+    "tests/python/test_hf_support.py": {
+      "sha256": "249e2b0d984161911a80a24005cf918616cb09bc8a331b8ddefbdbbac368ccfb",
+      "bytes": 1500
+    },
+    "tb/attn/tb_attn.cpp": {
+      "sha256": "1a9660d0afcba1bb0c455f7f1cebd876f6c5980783d451242b4104bb44ef3e80",
+      "bytes": 22117
+    },
+    "tb/vec/tb_vec.cpp": {
+      "sha256": "ce46e0b297d76a1aec7edaeca91fc21edf9f6d52877c775792b1465b9de49bcf",
+      "bytes": 13031
+    },
+    "docs/DENSE_HARDWARE_GAPS.md": {
+      "sha256": "ce6c6c026c0004898bc30b32d5189776d407a2ad78c3a22fb75297ba8515d2e0",
+      "bytes": 3444
+    },
+    "docs/HF_SUPPORT.md": {
+      "sha256": "b89eddf7aabf7ba4c890ce664c1c4fd0bede4aeee3bd38bbe3dc316fc9c2cb9a",
+      "bytes": 17426
+    },
+    "README.md": {
+      "sha256": "1e5fd098f508a52ba20dc9ae733ef783ec63b3d7e162d8b0baec4ac14fa7f1e9",
+      "bytes": 4803
+    }
+  }
+}

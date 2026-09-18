@@ -15,10 +15,13 @@ integer golden model owns the KV-cache decode path.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from .rope import build_rope_tables
 
 
 @dataclass
@@ -34,10 +37,23 @@ class ModelConfig:
     rope_base: float = 10000.0
     rms_eps: float = 1e-5
     qkv_bias: bool = False
+    o_bias: bool = False
+    mlp_bias: bool = False
+    qk_norm: bool = False
+    rope_scaling: dict | None = None
 
     def __post_init__(self) -> None:
-        if self.n_heads * self.head_dim != self.dim:
-            raise ValueError("n_heads * head_dim must equal dim")
+        for name in ("dim", "n_layers", "n_heads", "n_kv_heads", "head_dim", "ffn", "vocab", "max_seq"):
+            value = getattr(self, name)
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if not math.isfinite(self.rope_base) or self.rope_base <= 0:
+            raise ValueError("rope_base must be positive and finite")
+        if not math.isfinite(self.rms_eps) or self.rms_eps <= 0:
+            raise ValueError("rms_eps must be positive and finite")
+        for name in ("qkv_bias", "o_bias", "mlp_bias", "qk_norm"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"{name} must be boolean")
         if self.n_heads % self.n_kv_heads != 0:
             raise ValueError("n_heads must be a multiple of n_kv_heads")
         if self.head_dim % 2 != 0:
@@ -84,15 +100,17 @@ class Attention(nn.Module):
         self.head_dim = cfg.head_dim
         self.n_rep = cfg.n_heads // cfg.n_kv_heads
         kv_dim = cfg.n_kv_heads * cfg.head_dim
-        self.q_proj = nn.Linear(cfg.dim, cfg.dim, bias=cfg.qkv_bias)
+        self.q_proj = nn.Linear(cfg.dim, cfg.n_heads * cfg.head_dim, bias=cfg.qkv_bias)
         self.k_proj = nn.Linear(cfg.dim, kv_dim, bias=cfg.qkv_bias)
         self.v_proj = nn.Linear(cfg.dim, kv_dim, bias=cfg.qkv_bias)
-        self.o_proj = nn.Linear(cfg.dim, cfg.dim, bias=False)
+        self.o_proj = nn.Linear(cfg.n_heads * cfg.head_dim, cfg.dim, bias=cfg.o_bias)
+        self.q_norm = RMSNorm(cfg.head_dim, cfg.rms_eps) if cfg.qk_norm else nn.Identity()
+        self.k_norm = RMSNorm(cfg.head_dim, cfg.rms_eps) if cfg.qk_norm else nn.Identity()
 
     def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
         B, T, _ = x.shape
-        q = self.q_proj(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+        q = self.q_norm(self.q_proj(x).view(B, T, self.n_heads, self.head_dim)).transpose(1, 2)
+        k = self.k_norm(self.k_proj(x).view(B, T, self.n_kv_heads, self.head_dim)).transpose(1, 2)
         v = self.v_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
         q = apply_rotary(q, cos, sin)
         k = apply_rotary(k, cos, sin)
@@ -107,9 +125,9 @@ class Attention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
-        self.gate_proj = nn.Linear(cfg.dim, cfg.ffn, bias=False)
-        self.up_proj = nn.Linear(cfg.dim, cfg.ffn, bias=False)
-        self.down_proj = nn.Linear(cfg.ffn, cfg.dim, bias=False)
+        self.gate_proj = nn.Linear(cfg.dim, cfg.ffn, bias=cfg.mlp_bias)
+        self.up_proj = nn.Linear(cfg.dim, cfg.ffn, bias=cfg.mlp_bias)
+        self.down_proj = nn.Linear(cfg.ffn, cfg.dim, bias=cfg.mlp_bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
@@ -137,13 +155,9 @@ class TinyLlama(nn.Module):
         self.layers = nn.ModuleList(Block(cfg) for _ in range(cfg.n_layers))
         self.norm = RMSNorm(cfg.dim, cfg.rms_eps)
         self.lm_head = nn.Linear(cfg.dim, cfg.vocab, bias=False)
-        D = cfg.head_dim
-        inv_freq = cfg.rope_base ** (-torch.arange(0, D, 2, dtype=torch.float32) / D)
-        t = torch.arange(cfg.max_seq, dtype=torch.float32)
-        freqs = torch.outer(t, inv_freq)  # [max_seq, D/2]
-        emb = torch.cat((freqs, freqs), dim=-1)  # [max_seq, D]
-        self.register_buffer("rope_cos", emb.cos(), persistent=False)
-        self.register_buffer("rope_sin", emb.sin(), persistent=False)
+        cos, sin = build_rope_tables(cfg)
+        self.register_buffer("rope_cos", cos, persistent=False)
+        self.register_buffer("rope_sin", sin, persistent=False)
         self.apply(self._init_weights)
 
     @staticmethod

@@ -1,0 +1,36 @@
+{
+  "complete": true,
+  "scope": "software only; seeded Qwen3 context-end prefill/decode",
+  "inputs_sha256": {
+    "/Users/taisirhassan/Documents/Coding/llaccel/work/dense-support/qwen3-independent-width/v2-overlap.llbin": "edea7c838068c6733d3cb6c4638f4b02a91709a7dab9666dfa97f7a5f53567e2",
+    "/Users/taisirhassan/Documents/Coding/llaccel/build/llama-qwen-software/llaccel-sim": "6911030b36c1ddd92f2a7777a124696f9ac68248b7c84189f8527a16aee8a94e",
+    "/Users/taisirhassan/Documents/Coding/llaccel/work/dense-support/qwen3-independent-width/q-v2-overlap/qgraph.json": "2908ff50ded43d99b49e101c56c0f6e397e1790b10a8b6da1fcfc0c1ebff7200",
+    "/Users/taisirhassan/Documents/Coding/llaccel/work/dense-support/qwen3-independent-width/q-v2-overlap/qweights.bin": "e68db3ae08b49c12ca275bacc967ad72b786c3aefe4193db75380838cfbd8b90"
+  },
+  "cases": [
+    {
+      "prefill_tokens": 31,
+      "decode_tokens": 1,
+      "interleave_seed": null,
+      "result": "MATCH"
+    },
+    {
+      "prefill_tokens": 31,
+      "decode_tokens": 1,
+      "interleave_seed": 7,
+      "result": "MATCH"
+    },
+    {
+      "prefill_tokens": 32,
+      "decode_tokens": 0,
+      "interleave_seed": null,
+      "result": "MATCH"
+    },
+    {
+      "prefill_tokens": 32,
+      "decode_tokens": 0,
+      "interleave_seed": 7,
+      "result": "MATCH"
+    }
+  ]
+}

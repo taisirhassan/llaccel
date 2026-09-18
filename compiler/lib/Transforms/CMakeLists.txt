@@ -14,10 +14,6 @@ add_mlir_library(LLAccelTransforms
   LINK_LIBS PUBLIC
   LLAccelDialect
   LLAccelSupport
-  MLIRIR
-  MLIRPass
-  MLIRSupport
-  MLIRFuncDialect
-  MLIRTransformUtils
 )
 target_compile_options(LLAccelTransforms PRIVATE ${LLACCEL_COMPILER_WARNINGS})
+mlir_target_link_libraries(LLAccelTransforms PUBLIC MLIRIR MLIRPass MLIRSupport MLIRFuncDialect MLIRTransformUtils)

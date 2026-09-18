@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="540" viewBox="0 0 1040 540" role="img" aria-label="compiler-flow">
+<defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#d4d4d8"/></pattern><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="#52525b" stroke-width="1.5"/></marker></defs>
+<rect width="1040" height="540" fill="white"/><rect width="1040" height="540" fill="url(#grid)"/>
+<g font-family="Helvetica, Arial, sans-serif" fill="#27272a">
+<rect x="250" y="40" width="510" height="180" rx="4" fill="#fafafa" stroke="#a1a1aa" stroke-dasharray="6 5"/>
+<text x="266" y="65" font-size="14" fill="#52525b">compile</text>
+<rect x="30" y="105" width="170" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="115.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">checkpoint</text>
+<text x="115.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">Llama / Qwen</text>
+<rect x="280" y="105" width="180" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="370.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">Python frontend</text>
+<text x="370.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">import + calibrate</text>
+<rect x="530" y="105" width="200" height="70" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="630.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">C++ / MLIR</text>
+<text x="630.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">quantize, tile, schedule</text>
+<rect x="810" y="105" width="200" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="910.0" y="136.0" text-anchor="middle" font-size="16" font-weight="600">.llbin</text>
+<text x="910.0" y="159.0" text-anchor="middle" font-size="12" fill="#52525b">instructions + weights</text>
+<path d="M 200 140 L 280 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 460 140 L 530 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 730 140 L 810 140" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="30" y="320" width="170" height="70" rx="4" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+<text x="115.0" y="351.0" text-anchor="middle" font-size="16" font-weight="600">Transformers</text>
+<text x="115.0" y="374.0" text-anchor="middle" font-size="12" fill="#52525b">float reference</text>
+<rect x="280" y="320" width="200" height="70" rx="4" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+<text x="380.0" y="351.0" text-anchor="middle" font-size="16" font-weight="600">NumPy</text>
+<text x="380.0" y="374.0" text-anchor="middle" font-size="12" fill="#52525b">integer reference</text>
+<rect x="550" y="320" width="180" height="70" rx="4" fill="#ffffff" stroke="#52525b" stroke-width="1.5"/>
+<text x="640.0" y="351.0" text-anchor="middle" font-size="16" font-weight="600">compare outputs</text>
+<text x="640.0" y="374.0" text-anchor="middle" font-size="12" fill="#52525b">integer agreement</text>
+<rect x="810" y="320" width="200" height="70" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+<text x="910.0" y="351.0" text-anchor="middle" font-size="16" font-weight="600">execute</text>
+<text x="910.0" y="374.0" text-anchor="middle" font-size="12" fill="#52525b">ISA simulator / RTL</text>
+<path d="M 115 175 L 115 320" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 630 175 L 630 260 L 380 260 L 380 320" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="387" y="248" font-size="13" fill="#52525b">quantized graph</text>
+<path d="M 910 175 L 910 320" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 480 355 L 550 355" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 810 355 L 730 355" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M 115 390 L 115 470 L 910 470 L 910 390" fill="none" stroke="#52525b" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<text x="398" y="457" font-size="13" fill="#52525b">measure quantization error</text>
+</g></svg>

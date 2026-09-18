@@ -1,0 +1,29 @@
+{
+  "verilator": "5.052",
+  "passed": true,
+  "seed": 1,
+  "model_runs": 44,
+  "source_sha256": {
+    "rtl/gemm_engine.sv": "0799d66ba8528b3b58f56f39d16cea040dbd134980daba3a8d0e21108cb27295",
+    "rtl/sram_bank.sv": "78ae41fd6c95bdafcca7c4ae9e74035e0c2097cc31391b471f105df8210eec0c",
+    "rtl/llaccel_luts_pkg.sv": "33a095d16c40dbd30462917f7328e154dff94e95b70912b55cdab0c036062627",
+    "rtl/vec_engine.sv": "a618bc9a541146d3b113c1dece31ccf737016946a5aea17e8b6694d6235c6220",
+    "rtl/sync_fifo.sv": "45934c64d8389a49ecbf0617cf524fa2f7279bb2113996dbda527724954773ab",
+    "rtl/udiv.sv": "1eb5f63a8309d5b623680ae67aa5c39c6ad2d5ea2ad06bfc4fa1c81c8d35207e",
+    "rtl/dma_engine.sv": "53a58df78b2431d8fb631aa259368956371a4762493ecc8d592d81f100031338",
+    "rtl/cmd_proc.sv": "d04e64226708d25ebcbc8a410bd4e9f7b55f5f4f5897c86a9ae9e58986e68377",
+    "rtl/llaccel_core.sv": "6447e50cd8a8b228bf7ad7952cdd40a975b417ba38d9effcd5a442752ae778de",
+    "rtl/llaccel_pkg.sv": "9fefcb4aba85cb45595cb923fdb17d7aa53eb59f34f469845e4c29e18e0b310f",
+    "rtl/sram_xbar.sv": "0a69a435d08f75c5832fb2bba2e3d436cc0b67fe01e3740acd4a73dc9c42e2e1",
+    "rtl/attn_engine.sv": "d103aa6f3b21cbe907fb4b5762969aae6d1c97c69900e8da47c65d52dd1a6e46",
+    "rtl/llaccel_luts_undef.sv": "821b01afb647780dac540a93d09a63facf58efda0cd85bb974d65f5346413dc8",
+    "rtl/isqrt.sv": "8e2041859fd1f9cdf486e204436059230618ad9d55eab7857f784fdc6fc93130",
+    "rtl/perf_counters.sv": "c9e81e2fae537329426575c9b199a199c44c14eaca5511ef9b8b76c38161d06c",
+    "rtl/llaccel_top.sv": "71d55ed1e2f334a430912f025a40db6e826454485c6a40e1eeedd4c7e9857e45",
+    "rtl/dram_arb.sv": "c46ac6e231d6df78ec648f7871ea8557b441aaaa4157126cc2d3e825d40d839c",
+    "runtime/src/rtlsim_impl.h": "ffa63efb65090850be1ebe134f36c8df94c41a530195999e54f153f8d5b52d07",
+    "tb/attn/tb_attn.cpp": "83817e7b95bdbd3f4900da6b3203ab5bf880c4d726bfe7f18861228a6bf4f3df"
+  },
+  "simulator_sha256": "17fe48c880f2fbd5f2ef9f5efc0698dde580dc5fe57cd024aabfed108bec1433",
+  "note": "source hashes include removal of stale comments after tests; no logic changes"
+}

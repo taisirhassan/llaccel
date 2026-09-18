@@ -91,7 +91,7 @@ module sram_xbar
   output logic [15:0]          wr_bytes
 );
   localparam int unsigned NP = 10;
-  localparam logic [NP-1:0] IS_WRITE = 10'b0_1_1_0_1_0_1_0_0_0; // bit p set for write ports 2,4,7,8
+  localparam logic [NP-1:0] IS_WRITE = 10'b0_1_1_0_0_1_0_1_0_0; // bit p set for write ports 2,4,7,8
 
   // ---- gather ports into arrays -------------------------------------------------
   logic        v   [NP];
@@ -163,18 +163,20 @@ module sram_xbar
   // Grants are bank-disjoint, so at most one port matches each bank.
   always_comb begin
     for (int unsigned b = 0; b < NBANKS; b++) begin
-      logic [3:0] chunk;
       bank_en[b]    = 1'b0;
       bank_we[b]    = '0;
       bank_addr[b]  = '0;
       bank_wdata[b] = '0;
       for (int unsigned p = 0; p < NP; p++) begin
+        // chunk index of bank b within the (at most 64-B) write data; 256-B
+        // requests are reads, so two bits suffice
+        logic [1:0] chunk;
+        chunk = 2'(4'(b) - r[p].addr[7:4]);
         if (g[p] && mask[p][b]) begin
-          chunk         = 4'(b) - r[p].addr[7:4];
           bank_en[b]    = 1'b1;
           bank_addr[b]  = r[p].addr[SRAM_AW-1:8];
-          bank_we[b]    = IS_WRITE[p] ? ws[p][16*chunk[1:0] +: 16] : '0;
-          bank_wdata[b] = wd[p][128*chunk[1:0] +: 128];
+          bank_we[b]    = IS_WRITE[p] ? ws[p][16*chunk +: 16] : '0;
+          bank_wdata[b] = wd[p][128*chunk +: 128];
         end
       end
     end
@@ -184,21 +186,23 @@ module sram_xbar
   logic       rg     [NP];
   logic [3:0] rstart [NP];
 
-  always_ff @(posedge clk) begin
-    for (int unsigned p = 0; p < NP; p++) begin
-      if (!rst_n) begin
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int unsigned p = 0; p < NP; p++) begin
         rg[p]     <= 1'b0;
         rstart[p] <= '0;
-      end else begin
+      end
+    end else begin
+      for (int unsigned p = 0; p < NP; p++) begin
         rg[p]     <= g[p] && !IS_WRITE[p];
         rstart[p] <= r[p].addr[7:4];
       end
     end
   end
 
-  function automatic logic [511:0] gather4(input logic [3:0] start, input logic [BANK_DW-1:0] rd [NBANKS]);
+  function automatic logic [511:0] gather4(input logic [3:0] first, input logic [BANK_DW-1:0] rd [NBANKS]);
     logic [511:0] d;
-    for (int unsigned c = 0; c < 4; c++) d[128*c +: 128] = rd[4'(start + 4'(c))];
+    for (int unsigned c = 0; c < 4; c++) d[128*c +: 128] = rd[4'(first + 4'(c))];
     return d;
   endfunction
 
@@ -237,6 +241,31 @@ module sram_xbar
       end
     end
   end
+
+  // ---- simulation-only contract checks -------------------------------------------------
+  // A requester must present 16-B aligned addresses (256-B aligned for SZ_256) and
+  // never cross a 256-B line; the bank mask above silently drops banks otherwise.
+`ifndef SYNTHESIS
+  logic chk_armed;   // checks run from the first cycle after reset release
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) chk_armed <= 1'b0;
+    else        chk_armed <= 1'b1;
+  end
+  always_ff @(posedge clk) begin
+    if (chk_armed) begin
+      for (int unsigned p = 0; p < NP; p++) begin
+        if (v[p]) begin
+          if (r[p].addr[3:0] != 4'd0)
+            $error("sram_xbar: port %0d request addr %h is not 16-B aligned", p, r[p].addr);
+          if (r[p].size == SZ_256 && r[p].addr[7:0] != 8'd0)
+            $error("sram_xbar: port %0d 256-B request addr %h is not 256-B aligned", p, r[p].addr);
+          if ((32'(r[p].addr[7:0]) + size_bytes(r[p].size)) > 32'd256)
+            $error("sram_xbar: port %0d request addr %h size %0d crosses a 256-B line", p, r[p].addr, size_bytes(r[p].size));
+        end
+      end
+    end
+  end
+`endif
 
   logic unused_ok;
   always_comb begin

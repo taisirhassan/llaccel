@@ -22,17 +22,19 @@ using namespace num;
 
 class FuncSim final : public Device {
  public:
+  uint32_t maxAttentionHeadDim() const override { return 256; }
   explicit FuncSim(const DeviceOptions& opt) : opt_(opt), sram_(kSramBytes, 0) {
     dram_.resize(std::max<uint64_t>(opt.dramBytes, 1u << 20), 0);
   }
   std::string name() const override { return opt_.interleaveSeed ? "func-sim (interleaved)" : "func-sim"; }
   void dramWrite(uint64_t addr, const void* src, uint64_t n) override {
+    if (addr > UINT64_MAX - n) throw std::runtime_error("dramWrite address overflow");
     ensureDram(addr + n);
-    std::memcpy(&dram_[addr], src, n);
+    std::memcpy(dram_.data() + addr, src, n);
   }
   void dramRead(uint64_t addr, void* dst, uint64_t n) const override {
-    if (addr + n > dram_.size()) throw std::runtime_error("dramRead out of range");
-    std::memcpy(dst, &dram_[addr], n);
+    if (addr > dram_.size() || n > dram_.size() - addr) throw std::runtime_error("dramRead out of range");
+    std::memcpy(dst, dram_.data() + addr, n);
   }
   uint64_t dramSize() const override { return dram_.size(); }
   std::vector<uint8_t> sramSnapshot() const override { return sram_; }
@@ -57,6 +59,11 @@ class FuncSim final : public Device {
       if (!halted) {
         if (fetchPc + kInstrBytes > dram_.size()) throw std::runtime_error("instruction fetch out of DRAM range");
         next = Instr::fromBytes(&dram_[fetchPc]);
+        if ((next.waitSem() != kNoSem && next.waitSem() >= kNumSem) ||
+            (next.signalSem() != kNoSem && next.signalSem() >= kNumSem))
+          throw std::runtime_error("invalid semaphore index");
+        if (engineOf(next.op()) == Engine::CP && next.op() != Op::NOP && next.op() != Op::HALT)
+          throw std::runtime_error("invalid command processor opcode");
         perf_[PERF_DRAM_RD_BYTES] += 0;  // instruction fetch bytes are accounted at issue below
         bool waitOk = next.waitSem() == kNoSem || sem_[next.waitSem()] >= next.waitVal();
         int eng = int(engineOf(next.op()));
@@ -109,6 +116,11 @@ class FuncSim final : public Device {
   void chk(uint64_t addr, uint64_t n, const char* what) const {
     if (addr + n > sram_.size()) throw std::runtime_error(std::string("SRAM access out of range in ") + what + " @0x" + hex(addr));
   }
+  void chkDram(uint64_t addr, uint64_t n, const char* what) const {
+    if (addr > dram_.size() || n > dram_.size() - addr ||
+        addr > UINT32_MAX || n > uint64_t(UINT32_MAX) + 1 - addr)
+      throw std::runtime_error(std::string("DRAM access out of range in ") + what + " @0x" + hex(addr));
+  }
   int8_t rd8(uint32_t a) const { return int8_t(sram_[a]); }
   int16_t rd16(uint32_t a) const { int16_t v; std::memcpy(&v, &sram_[a], 2); return v; }
   int32_t rd32(uint32_t a) const { int32_t v; std::memcpy(&v, &sram_[a], 4); return v; }
@@ -116,6 +128,15 @@ class FuncSim final : public Device {
   void wr16(uint32_t a, int16_t v) { std::memcpy(&sram_[a], &v, 2); }
 
   void execute(const Instr& in) {
+    auto shift = [](uint32_t s) { if (s > 63) throw std::runtime_error("shift outside [0,63]"); };
+    switch (in.op()) {
+      case Op::GEMM: shift(epAuxShift(in[11])); shift(in[13] & 255); shift((in[13] >> 8) & 255); break;
+      case Op::VEC_RMSNORM: shift(in[9]); break;
+      case Op::VEC_SILU: shift(in[6]); shift(in[7]); break;
+      case Op::VEC_QUANT: case Op::VEC_ADD: case Op::VEC_MUL: shift(in[6]); break;
+      case Op::ATTN: shift(in[12]); shift(in[14]); break;
+      default: break;
+    }
     if (opt_.trace) trace(in);
     switch (in.op()) {
       case Op::DMA_LOAD: return dma(in, true);
@@ -144,7 +165,19 @@ class FuncSim final : public Device {
   void dma(const Instr& in, bool load) {
     uint32_t sramA = in[2], dramA = in[3], rows = in[4], rowBytes = in[5], srcStride = in[6], dstStride = in[7];
     if (rowBytes % 16 || sramA % 16) throw std::runtime_error("DMA row/addr not 16-B aligned");
+    uint64_t beats = 0, sramReadBytes = 0;
     for (uint32_t r = 0; r < rows; ++r) {
+      const uint64_t dramRow = uint64_t(dramA) + uint64_t(r) * (load ? srcStride : dstStride);
+      beats += rowBytes ? ((dramRow % 64) + rowBytes + 63) / 64 : 0;
+      if (!load) {
+        uint64_t copied = 0;
+        while (copied < rowBytes) {
+          const uint64_t useful = std::min<uint64_t>(64 - ((dramRow + copied) % 64), rowBytes - copied);
+          const uint64_t source = uint64_t(sramA) + uint64_t(r) * srcStride + copied;
+          sramReadBytes += ((source % 64 + useful + 63) / 64) * 64;
+          copied += useful;
+        }
+      }
       if (load) {
         uint64_t s = uint64_t(dramA) + uint64_t(r) * srcStride, d = uint64_t(sramA) + uint64_t(r) * dstStride;
         if (s + rowBytes > dram_.size()) throw std::runtime_error("DMA_LOAD source out of DRAM range");
@@ -158,9 +191,9 @@ class FuncSim final : public Device {
       }
     }
     uint64_t bytes = uint64_t(rows) * rowBytes;
-    perf_[load ? PERF_SRAM_WR_BYTES : PERF_SRAM_RD_BYTES] += bytes;
-    perf_[load ? PERF_DRAM_RD_BYTES : PERF_DRAM_WR_BYTES] += bytes;
-    perf_[PERF_DMA_BUSY] += (bytes + 63) / 64;  // ideal beats, informational
+    perf_[load ? PERF_SRAM_WR_BYTES : PERF_SRAM_RD_BYTES] += load ? bytes : sramReadBytes;
+    perf_[load ? PERF_DRAM_RD_BYTES : PERF_DRAM_WR_BYTES] += beats * 64;
+    perf_[PERF_DMA_BUSY] += beats;  // ideal beats, informational
   }
 
   void gemm(const Instr& in) {
@@ -203,6 +236,7 @@ class FuncSim final : public Device {
           int64_t v = acc[m * 16 + n];
           if (hasBias) v += rd32(bias + ch * 4);
           RqEntry e{rd32(rq + ch * 8), rd32(rq + ch * 8 + 4)};
+          if (e.M < 0 || e.S < 0 || e.S > 63) throw std::runtime_error("invalid requantization table entry");
           if (outI8) {
             wr8(out + m * outRow + ch, int8_t(sat8(mulshift(v, uint32_t(e.M), uint32_t(e.S)))));
             continue;
@@ -244,7 +278,10 @@ class FuncSim final : public Device {
 
   void ropeOp(const Instr& in) {
     uint32_t src = in[2], dst = in[3], M = in[4], H = in[5], D = in[6], table = in[7], stride = in[8];
-    if (D != 16 && D != 32 && D != 64) throw std::runtime_error("ROPE bad D");
+    if (D != 16 && D != 32 && D != 64 && D != 128 && D != 256) throw std::runtime_error("ROPE bad D");
+    if (M == 0 || M > kGemmTM || H == 0 || H > 255 || pos_ >= kAttnTMax ||
+        M > kAttnTMax - pos_ || stride < 2 * D)
+      throw std::runtime_error("ROPE invalid row/head/context dimensions");
     uint32_t row = H * D;
     chk(src, uint64_t(M) * row * 2, "ROPE src"); chk(dst, uint64_t(M) * row * 2, "ROPE dst");
     std::vector<int16_t> x(row), y(row), c(D / 2), s(D / 2);
@@ -295,8 +332,12 @@ class FuncSim final : public Device {
   void attn(const Instr& in) {
     uint32_t q = in[2], out = in[3], kbase = in[4], vbase = in[5], M = in[6], H = in[7], Hkv = in[8], D = in[9],
              kvStride = in[10], Ms = in[11], Ss = in[12], Mo = in[13], So = in[14];
-    if (D != 16 && D != 32 && D != 64) throw std::runtime_error("ATTN bad D");
-    if (Hkv == 0 || H % Hkv) throw std::runtime_error("ATTN H not a multiple of Hkv");
+    if (D != 16 && D != 32 && D != 64 && D != 128 && D != 256) throw std::runtime_error("ATTN bad D");
+    if (M == 0 || M > kGemmTM || H == 0 || H > 255 || Hkv == 0 || Hkv > 255 || H % Hkv)
+      throw std::runtime_error("ATTN invalid row/head dimensions");
+    if (pos_ >= kAttnTMax || M > kAttnTMax - pos_ ||
+        uint64_t(pos_ + M) * D > kvStride || kvStride % 16 || kbase % 16 || vbase % 16)
+      throw std::runtime_error("ATTN invalid context/DRAM cache stride");
     uint32_t row = H * D, grp = H / Hkv;
     chk(q, uint64_t(M) * row, "ATTN q"); chk(out, uint64_t(M) * row, "ATTN out");
     std::vector<int8_t> qv(D), o(D);
@@ -308,32 +349,49 @@ class FuncSim final : public Device {
       for (uint32_t h = 0; h < H; ++h) {
         uint32_t kvh = h / grp;
         uint64_t kb = uint64_t(kbase) + uint64_t(kvh) * kvStride, vb = uint64_t(vbase) + uint64_t(kvh) * kvStride;
-        chk(kb, uint64_t(T) * D, "ATTN K"); chk(vb, uint64_t(T) * D, "ATTN V");
+        chkDram(kb, uint64_t(T) * D, "ATTN K"); chkDram(vb, uint64_t(T) * D, "ATTN V");
         for (uint32_t d = 0; d < D; ++d) qv[d] = rd8(q + m * row + h * D + d);
-        attention_head(qv, D, T, [&](uint32_t t) { return reinterpret_cast<const int8_t*>(&sram_[kb + t * D]); },
-                       [&](uint32_t t) { return reinterpret_cast<const int8_t*>(&sram_[vb + t * D]); }, Ms, Ss, Mo, So, o,
-                       scores, probs);
+        attention_head(qv, D, T, [&](uint32_t t) { return reinterpret_cast<const int8_t*>(&dram_[kb + uint64_t(t) * D]); },
+                       [&](uint32_t t) { return reinterpret_cast<const int8_t*>(&dram_[vb + uint64_t(t) * D]); }, Ms, Ss, Mo, So, o,
+                       scores, probs, (in.flags() & kFlagAttnWideProb) != 0);
         for (uint32_t d = 0; d < D; ++d) wr8(out + m * row + h * D + d, o[d]);
-        perf_[PERF_SRAM_RD_BYTES] += D + 2ull * T * D;
+        perf_[PERF_SRAM_RD_BYTES] += D;
+        // The current adapter fetches one containing64-byte beat per D-row,
+        // or D/16 pieces when that row crosses a beat. Three K passes, one V.
+        auto rowBeats = [&](uint64_t base) {
+          uint64_t beats=0;
+          for (uint32_t t=0; t<T; ++t)
+            beats += ((base + uint64_t(t)*D) % kDramBeat + D > kDramBeat) ? D/16 : 1;
+          return beats;
+        };
+        const uint64_t kvReadBytes = (3 * rowBeats(kb) + rowBeats(vb)) * kDramBeat;
+        perf_[PERF_DRAM_RD_BYTES] += kvReadBytes;
+        perf_[PERF_ATTN_DRAM_RD_BYTES] += kvReadBytes;
         perf_[PERF_SRAM_WR_BYTES] += D;
-        perf_[PERF_ATTN_MAC_CYCLES] += 2ull * T;
-        perf_[PERF_ATTN_BUSY] += 3ull * T + 32;
+        perf_[PERF_ATTN_MAC_CYCLES] += 4ull * T;
+        perf_[PERF_ATTN_BUSY] += 7ull * T + 32;
       }
     }
   }
 
   void kvWrite(const Instr& in) {
     uint32_t src = in[2], base = in[3], M = in[4], Hkv = in[5], D = in[6], kvStride = in[7];
+    if ((D != 16 && D != 32 && D != 64 && D != 128 && D != 256) || M == 0 || M > kGemmTM ||
+        Hkv == 0 || Hkv > 255 || pos_ >= kAttnTMax || M > kAttnTMax - pos_ ||
+        uint64_t(pos_ + M) * D > kvStride || kvStride % 16 || base % 16)
+      throw std::runtime_error("KV_WRITE invalid dimensions/DRAM cache stride");
     uint32_t row = Hkv * D;
     chk(src, uint64_t(M) * row, "KV_WRITE src");
     for (uint32_t m = 0; m < M; ++m)
       for (uint32_t kvh = 0; kvh < Hkv; ++kvh) {
         uint64_t d = uint64_t(base) + uint64_t(kvh) * kvStride + uint64_t(pos_ + m) * D;
-        chk(d, D, "KV_WRITE dst");
-        std::memcpy(&sram_[d], &sram_[src + m * row + kvh * D], D);
+        chkDram(d, D, "KV_WRITE dst");
+        std::memcpy(&dram_[d], &sram_[src + m * row + kvh * D], D);
+        const uint64_t kvWriteBytes = ((d % kDramBeat + D > kDramBeat) ? D/16 : 1) * kDramBeat;
+        perf_[PERF_DRAM_WR_BYTES] += kvWriteBytes;
+        perf_[PERF_ATTN_DRAM_WR_BYTES] += kvWriteBytes;
       }
     perf_[PERF_SRAM_RD_BYTES] += uint64_t(M) * row;
-    perf_[PERF_SRAM_WR_BYTES] += uint64_t(M) * row;
     perf_[PERF_ATTN_BUSY] += uint64_t(M) * Hkv;
   }
 

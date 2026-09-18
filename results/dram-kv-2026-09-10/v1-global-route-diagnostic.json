@@ -1,0 +1,569 @@
+{
+  "variant": "v1",
+  "platform": "nangate45",
+  "stage": "route",
+  "run_directory": "build/orfs/final-dram-kv-native-no-fa-single-pass",
+  "external_sram_included": false,
+  "physical_boundary": "llaccel_core: command processor, engines, SRAM crossbar, DRAM arbiter, counters and mapped internal arrays",
+  "excluded_components": [
+    "external 1 MiB SRAM macros",
+    "external DRAM storage",
+    "DRAM controller and PHY"
+  ],
+  "clock_period_ns": 3.0,
+  "wns_ns": -4.13,
+  "worst_setup_slack_ns": -4.13,
+  "tns_ns": -7467.99,
+  "setup_violation_count": 5494,
+  "hold_violation_count": 7806,
+  "max_slew_violation_count": 0,
+  "max_fanout_violation_count": 0,
+  "max_cap_violation_count": 277,
+  "hold_count_scope": "OpenSTA minimum-delay checks; may include asynchronous-reset removal checks.",
+  "design_area_um2": 2083809.0,
+  "utilization_pct": 40.0,
+  "total_power_w": null,
+  "instance_count": null,
+  "synth_cells": 1267036,
+  "synth_area_um2": 1824750.157996,
+  "clock_min_period_ns": 7.13,
+  "fmax_mhz_est": 140.25245441795232,
+  "timing_source": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+  "physical_complete": false,
+  "power_method": "Not measured: optional vectorless power calculation omitted from this physical profile.",
+  "sources": {
+    "clock_period_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/results/nangate45/llaccel_core_v1/base/clock_period.txt",
+    "wns_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "worst_setup_slack_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "tns_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "setup_violation_count": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "hold_violation_count": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "max_slew_violation_count": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "max_fanout_violation_count": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "max_cap_violation_count": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "design_area_um2": "build/orfs/final-dram-kv-native-no-fa-single-pass/logs/nangate45/llaccel_core_v1/base/5_1_grt.log",
+    "utilization_pct": "build/orfs/final-dram-kv-native-no-fa-single-pass/logs/nangate45/llaccel_core_v1/base/5_1_grt.log",
+    "synth_cells": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/synth_stat.txt",
+    "synth_area_um2": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/synth_stat.txt",
+    "clock_min_period_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "fmax_mhz_est": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "critical_setup_paths": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "critical_min_paths": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "worst_register_hold_slack_ns": "build/orfs/final-dram-kv-native-no-fa-single-pass/reports/nangate45/llaccel_core_v1/base/5_global_route.rpt",
+    "optimization_profile": "build/orfs/final-dram-kv-native-no-fa-single-pass/physical-profile.json"
+  },
+  "critical_setup_paths": [
+    {
+      "startpoint": "u_vec.u_f0.rp[1]$_DFFE_PN0P_",
+      "endpoint": "u_vec.wr_data_r[132]$_DFFE_PN0P_",
+      "check_kind": "setup",
+      "register_to_register": false,
+      "slack_ns": -4.13,
+      "report": "Startpoint: u_vec.u_f0.rp[1]$_DFFE_PN0P_\n            (rising edge-triggered flip-flop clocked by clk)\nEndpoint: u_vec.wr_data_r[132]$_DFFE_PN0P_\n          (rising edge-triggered flip-flop clocked by clk)\nPath Group: clk\nPath Type: max\n\nFanout     Cap    Slew   Delay    Time   Description\n-----------------------------------------------------------------------------\n                          0.00    0.00   clock clk (rise edge)\n                          0.00    0.00   clock source latency\n     1   43.07    0.00    0.00    0.00 ^ clk (in)\n                                         clk (net)\n                  0.01    0.01    0.01 ^ wire638656/A (BUF_X8)\n     1   45.53    0.01    0.03    0.03 ^ wire638656/Z (BUF_X8)\n                                         net638388 (net)\n                  0.02    0.01    0.05 ^ wire638655/A (BUF_X16)\n     1   88.89    0.01    0.03    0.07 ^ wire638655/Z (BUF_X16)\n                                         net638387 (net)\n                  0.05    0.04    0.11 ^ wire638654/A (BUF_X32)\n     1   90.83    0.01    0.03    0.14 ^ wire638654/Z (BUF_X32)\n                                         net638386 (net)\n                  0.05    0.04    0.18 ^ wire638653/A (BUF_X32)\n     1   65.17    0.01    0.03    0.21 ^ wire638653/Z (BUF_X32)\n                                         net638385 (net)\n                  0.03    0.02    0.23 ^ clkbuf_0_clk/A (CLKBUF_X3)\n     2   44.33    0.03    0.07    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n                                         clknet_0_clk (net)\n                  0.04    0.00    0.30 ^ clkbuf_1_0_0_clk/A (CLKBUF_X3)\n     1   29.03    0.02    0.06    0.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_0_clk (net)\n                  0.02    0.01    0.37 ^ clkbuf_1_0_1_clk/A (CLKBUF_X3)\n     2   35.18    0.03    0.06    0.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_1_clk (net)\n                  0.03    0.01    0.43 ^ clkbuf_2_1_0_clk/A (CLKBUF_X3)\n     1   27.71    0.02    0.06    0.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_0_clk (net)\n                  0.02    0.01    0.49 ^ clkbuf_2_1_1_clk/A (CLKBUF_X3)\n     1   30.38    0.02    0.06    0.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_1_clk (net)\n                  0.03    0.01    0.56 ^ clkbuf_2_1_2_clk/A (CLKBUF_X3)\n     2   45.45    0.04    0.07    0.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_2_clk (net)\n                  0.04    0.00    0.63 ^ clkbuf_3_3_0_clk/A (CLKBUF_X3)\n     2   43.26    0.03    0.07    0.70 ^ clkbuf_3_3_0_clk/Z (CLKBUF_X3)\n                                         clknet_3_3_0_clk (net)\n                  0.03    0.01    0.71 ^ clkbuf_4_7_0_clk/A (CLKBUF_X3)\n     2   28.53    0.02    0.06    0.76 ^ clkbuf_4_7_0_clk/Z (CLKBUF_X3)\n                                         clknet_4_7_0_clk (net)\n                  0.02    0.01    0.77 ^ clkbuf_5_15_0_clk/A (CLKBUF_X3)\n     2   39.68    0.03    0.06    0.83 ^ clkbuf_5_15_0_clk/Z (CLKBUF_X3)\n                                         clknet_5_15_0_clk (net)\n                  0.03    0.01    0.84 ^ clkbuf_6_31_0_clk/A (CLKBUF_X3)\n     4   36.90    0.03    0.07    0.90 ^ clkbuf_6_31_0_clk/Z (CLKBUF_X3)\n                                         clknet_6_31_0_clk (net)\n                  0.03    0.00    0.91 ^ clkbuf_8_127_0_clk/A (CLKBUF_X3)\n     8   41.38    0.03    0.07    0.97 ^ clkbuf_8_127_0_clk/Z (CLKBUF_X3)\n                                         clknet_8_127_0_clk (net)\n                  0.03    0.00    0.98 ^ clkbuf_11_1017__f_clk/A (CLKBUF_X3)\n     4   11.91    0.01    0.05    1.02 ^ clkbuf_11_1017__f_clk/Z (CLKBUF_X3)\n                                         clknet_11_1017__leaf_clk (net)\n                  0.01    0.00    1.02 ^ clkbuf_leaf_7676_clk/A (CLKBUF_X3)\n     7    9.20    0.01    0.04    1.06 ^ clkbuf_leaf_7676_clk/Z (CLKBUF_X3)\n                                         clknet_leaf_7676_clk (net)\n                  0.01    0.00    1.06 ^ u_vec.u_f0.rp[1]$_DFFE_PN0P_/CK (DFFR_X2)\n     2   16.69    0.02    0.15    1.21 ^ u_vec.u_f0.rp[1]$_DFFE_PN0P_/Q (DFFR_X2)\n                                         u_vec.u_f0.rp[1] (net)\n                  0.02    0.00    1.21 ^ place617704/A (BUF_X4)\n     7   85.02    0.03    0.05    1.25 ^ place617704/Z (BUF_X4)\n                                         net617436 (net)\n                  0.07    0.04    1.30 ^ place617685/A (BUF_X2)\n     6   76.47    0.08    0.10    1.40 ^ place617685/Z (BUF_X2)\n                                         net617417 (net)\n                  0.09    0.03    1.42 ^ place617682/A (BUF_X1)\n     8   19.60    0.05    0.08    1.50 ^ place617682/Z (BUF_X1)\n                                         net617414 (net)\n                  0.05    0.00    1.50 ^ _1812822_/S (MUX2_X2)\n     5   24.40    0.02    0.10    1.60 v _1812822_/Z (MUX2_X2)\n                                         _0898863_ (net)\n                  0.02    0.00    1.60 v place609339/A (BUF_X1)\n     2    5.25    0.01    0.04    1.64 v place609339/Z (BUF_X1)\n                                         net609071 (net)\n                  0.01    0.00    1.64 v place609337/A (BUF_X4)\n    11   22.66    0.01    0.03    1.67 v place609337/Z (BUF_X4)\n                                         net609069 (net)\n                  0.01    0.00    1.67 v _2176536_/A2 (NAND2_X1)\n     2    3.76    0.01    0.02    1.69 ^ _2176536_/ZN (NAND2_X1)\n                                         _0141588_ (net)\n                  0.01    0.00    1.69 ^ _2176540_/A (XNOR2_X1)\n     2    4.49    0.03    0.05    1.74 ^ _2176540_/ZN (XNOR2_X1)\n                                         _0141592_ (net)\n                  0.03    0.00    1.74 ^ _2176601_/A (XOR2_X1)\n     2    4.12    0.03    0.06    1.80 ^ _2176601_/Z (XOR2_X1)\n                                         _0141653_ (net)\n                  0.03    0.00    1.80 ^ _2176609_/A (XNOR2_X1)\n     2    3.80    0.03    0.05    1.85 ^ _2176609_/ZN (XNOR2_X1)\n                                         _0141661_ (net)\n                  0.03    0.00    1.85 ^ _2176669_/A (XOR2_X1)\n     2    3.53    0.03    0.06    1.91 ^ _2176669_/Z (XOR2_X1)\n                                         _0141721_ (net)\n                  0.03    0.00    1.91 ^ _2176686_/A (XNOR2_X1)\n     2    4.36    0.03    0.05    1.96 ^ _2176686_/ZN (XNOR2_X1)\n                                         _0141738_ (net)\n                  0.03    0.00    1.96 ^ _2176741_/A (XNOR2_X1)\n     2    3.78    0.03    0.05    2.01 ^ _2176741_/ZN (XNOR2_X1)\n                                         _0141793_ (net)\n                  0.03    0.00    2.01 ^ _2176774_/A (XNOR2_X1)\n     2    4.29    0.03    0.05    2.06 ^ _2176774_/ZN (XNOR2_X1)\n                                         _0141826_ (net)\n                  0.03    0.00    2.06 ^ _2176814_/A (XOR2_X1)\n     2    3.73    0.03    0.06    2.12 ^ _2176814_/Z (XOR2_X1)\n                                         _0141866_ (net)\n                  0.03    0.00    2.12 ^ _2176873_/A (XNOR2_X1)\n     2    6.66    0.04    0.06    2.18 ^ _2176873_/ZN (XNOR2_X1)\n                                         _0141925_ (net)\n                  0.04    0.00    2.18 ^ _2176894_/A (XOR2_X1)\n     2    3.98    0.03    0.06    2.24 ^ _2176894_/Z (XOR2_X1)\n                                         _0141946_ (net)\n                  0.03    0.00    2.24 ^ _2176966_/A (XOR2_X1)\n     2    3.68    0.03    0.06    2.31 ^ _2176966_/Z (XOR2_X1)\n                                         _0142018_ (net)\n                  0.03    0.00    2.31 ^ _2176972_/A (XNOR2_X1)\n     2    5.05    0.03    0.05    2.36 ^ _2176972_/ZN (XNOR2_X1)\n                                         _0142024_ (net)\n                  0.03    0.00    2.36 ^ place509678/A (BUF_X2)\n     2    3.78    0.01    0.03    2.39 ^ place509678/Z (BUF_X2)\n                                         net509410 (net)\n                  0.01    0.00    2.39 ^ _2178318_/A (XOR2_X1)\n     3    5.77    0.04    0.07    2.45 ^ _2178318_/Z (XOR2_X1)\n                                         _0143370_ (net)\n                  0.04    0.00    2.45 ^ _2178500_/A4 (NAND4_X1)\n     3    8.68    0.04    0.06    2.51 v _2178500_/ZN (NAND4_X1)\n                                         _0143552_ (net)\n                  0.04    0.00    2.52 v _2178656_/A2 (NOR2_X1)\n     2    3.45    0.02    0.05    2.56 ^ _2178656_/ZN (NOR2_X1)\n                                         _0143708_ (net)\n                  0.02    0.00    2.56 ^ _2178658_/A2 (NAND2_X1)\n     1    5.55    0.01    0.03    2.59 v _2178658_/ZN (NAND2_X1)\n                                         _0143710_ (net)\n                  0.01    0.00    2.59 v _2178660_/A2 (OR4_X1)\n     1    5.47    0.02    0.11    2.70 v _2178660_/ZN (OR4_X1)\n                                         _0143712_ (net)\n                  0.02    0.00    2.71 v _2178661_/A3 (NAND3_X1)\n     2    5.58    0.02    0.04    2.74 ^ _2178661_/ZN (NAND3_X1)\n                                         _0143713_ (net)\n                  0.02    0.00    2.74 ^ _2178890_/B (XNOR2_X1)\n     4    5.13    0.02    0.03    2.77 v _2178890_/ZN (XNOR2_X1)\n                                         _0143942_ (net)\n                  0.02    0.00    2.77 v _2178951_/B (MUX2_X1)\n     2    2.74    0.01    0.06    2.83 v _2178951_/Z (MUX2_X1)\n                                         _0144003_ (net)\n                  0.01    0.00    2.83 v _2178982_/A (MUX2_X1)\n     2    3.57    0.01    0.06    2.90 v _2178982_/Z (MUX2_X1)\n                                         _0144034_ (net)\n                  0.01    0.00    2.90 v _2179288_/A (MUX2_X1)\n     1    1.43    0.01    0.06    2.96 v _2179288_/Z (MUX2_X1)\n                                         _0144340_ (net)\n                  0.01    0.00    2.96 v _2179289_/A (MUX2_X1)\n     2    3.46    0.01    0.06    3.02 v _2179289_/Z (MUX2_X1)\n                                         _0144341_ (net)\n                  0.01    0.00    3.02 v _2179290_/B (MUX2_X1)\n     2    3.40    0.01    0.06    3.08 v _2179290_/Z (MUX2_X1)\n                                         _0144342_ (net)\n                  0.01    0.00    3.08 v _2179291_/B (MUX2_X1)\n     4   10.63    0.02    0.08    3.16 v _2179291_/Z (MUX2_X1)\n                                         _0144343_ (net)\n                  0.02    0.00    3.16 v _2179298_/A2 (NOR4_X1)\n     1    5.21    0.07    0.11    3.27 ^ _2179298_/ZN (NOR4_X1)\n                                         _0144350_ (net)\n                  0.07    0.00    3.27 ^ place457501/A (BUF_X2)\n     2    3.66    0.01    0.03    3.30 ^ place457501/Z (BUF_X2)\n                                         net457233 (net)\n                  0.01    0.00    3.30 ^ place457500/A (BUF_X1)\n     3    5.07    0.01    0.03    3.33 ^ place457500/Z (BUF_X1)\n                                         net457232 (net)\n                  0.01    0.00    3.33 ^ _2179330_/A1 (NAND4_X1)\n     2    2.97    0.02    0.03    3.36 v _2179330_/ZN (NAND4_X1)\n                                         _0144382_ (net)\n                  0.02    0.00    3.36 v _2179508_/A2 (NOR3_X1)\n     1    7.29    0.06    0.09    3.45 ^ _2179508_/ZN (NOR3_X1)\n                                         _0144560_ (net)\n                  0.06    0.00    3.45 ^ place450180/A (BUF_X2)\n     1    3.13    0.01    0.03    3.48 ^ place450180/Z (BUF_X2)\n                                         net449912 (net)\n                  0.01    0.00    3.48 ^ _2179509_/B (XNOR2_X1)\n     1    1.69    0.01    0.02    3.50 v _2179509_/ZN (XNOR2_X1)\n                                         _0144561_ (net)\n                  0.01    0.00    3.50 v _2179510_/B (MUX2_X1)\n     3    5.58    0.01    0.07    3.57 v _2179510_/Z (MUX2_X1)\n                                         _0144562_ (net)\n                  0.01    0.00    3.57 v _2179687_/A1 (OR4_X1)\n     1    2.28    0.02    0.09    3.65 v _2179687_/ZN (OR4_X1)\n                                         _0144739_ (net)\n                  0.02    0.00    3.65 v _2179693_/A (AOI221_X1)\n     1    4.67    0.06    0.10    3.75 ^ _2179693_/ZN (AOI221_X1)\n                                         _0144745_ (net)\n                  0.06    0.00    3.75 ^ place437609/A (BUF_X2)\n     2    8.06    0.01    0.04    3.79 ^ place437609/Z (BUF_X2)\n                                         net437341 (net)\n                  0.01    0.00    3.79 ^ _2179705_/B2 (OAI221_X2)\n     1    4.68    0.03    0.04    3.82 v _2179705_/ZN (OAI221_X2)\n                                         _0144757_ (net)\n                  0.03    0.00    3.82 v place435775/A (BUF_X4)\n     2   22.56    0.01    0.04    3.86 v place435775/Z (BUF_X4)\n                                         net435507 (net)\n                  0.01    0.00    3.86 v _2179717_/B (XOR2_X2)\n     4   16.35    0.03    0.07    3.93 v _2179717_/Z (XOR2_X2)\n                                         _0144769_ (net)\n                  0.03    0.00    3.93 v place433986/A (BUF_X4)\n     2    7.90    0.01    0.04    3.97 v place433986/Z (BUF_X4)\n                                         net433718 (net)\n                  0.01    0.00    3.97 v _2179718_/B2 (AOI21_X4)\n     2    7.55    0.02    0.03    4.00 ^ _2179718_/ZN (AOI21_X4)\n                                         _0144770_ (net)\n                  0.02    0.00    4.00 ^ place431116/A (BUF_X2)\n     5   18.81    0.02    0.04    4.04 ^ place431116/Z (BUF_X2)\n                                         net430848 (net)\n                  0.02    0.00    4.05 ^ place431115/A (BUF_X2)\n    10   27.09    0.03    0.05    4.10 ^ place431115/Z (BUF_X2)\n                                         net430847 (net)\n                  0.03    0.00    4.10 ^ place431114/A (BUF_X1)\n     2    3.86    0.01    0.03    4.14 ^ place431114/Z (BUF_X1)\n                                         net430846 (net)\n                  0.01    0.00    4.14 ^ _2180034_/A3 (NAND3_X1)\n     3    5.79    0.02    0.03    4.17 v _2180034_/ZN (NAND3_X1)\n                                         _0145086_ (net)\n                  0.02    0.00    4.17 v place425716/A (BUF_X2)\n     3    6.13    0.01    0.03    4.20 v place425716/Z (BUF_X2)\n                                         net425448 (net)\n                  0.01    0.00    4.20 v _2180895_/B1 (AOI22_X1)\n     1    4.90    0.04    0.06    4.26 ^ _2180895_/ZN (AOI22_X1)\n                                         _0145947_ (net)\n                  0.04    0.00    4.26 ^ _2180897_/A (AOI21_X1)\n     1    2.13    0.01    0.02    4.28 v _2180897_/ZN (AOI21_X1)\n                                         _0145949_ (net)\n                  0.01    0.00    4.28 v _2180899_/A (MUX2_X1)\n     1    1.72    0.01    0.06    4.34 v _2180899_/Z (MUX2_X1)\n                                         _0145951_ (net)\n                  0.01    0.00    4.34 v _2180900_/B (MUX2_X1)\n     1    3.18    0.01    0.06    4.40 v _2180900_/Z (MUX2_X1)\n                                         _0145952_ (net)\n                  0.01    0.00    4.40 v _2180914_/A (MUX2_X1)\n     1    1.41    0.01    0.06    4.46 v _2180914_/Z (MUX2_X1)\n                                         _0145966_ (net)\n                  0.01    0.00    4.46 v _2180935_/A (MUX2_X1)\n     3   12.80    0.02    0.08    4.54 v _2180935_/Z (MUX2_X1)\n                                         _0145987_ (net)\n                  0.02    0.00    4.54 v _2180983_/A2 (AND3_X1)\n     3    6.38    0.01    0.05    4.59 v _2180983_/ZN (AND3_X1)\n                                         _0146035_ (net)\n                  0.01    0.00    4.59 v _2180985_/A1 (OR2_X2)\n     4    8.00    0.01    0.05    4.64 v _2180985_/ZN (OR2_X2)\n                                         _0146037_ (net)\n                  0.01    0.00    4.64 v place407485/A (BUF_X1)\n     3    5.63    0.01    0.03    4.67 v place407485/Z (BUF_X1)\n                                         net407217 (net)\n                  0.01    0.00    4.67 v _2181205_/A1 (NAND2_X1)\n     2    4.17    0.01    0.02    4.69 ^ _2181205_/ZN (NAND2_X1)\n                                         _0146257_ (net)\n                  0.01    0.00    4.69 ^ _2181207_/B2 (OAI221_X1)\n     2    7.30    0.03    0.05    4.74 v _2181207_/ZN (OAI221_X1)\n                                         _0146259_ (net)\n                  0.03    0.00    4.74 v _2181208_/A (XNOR2_X2)\n     7   18.54    0.05    0.07    4.82 ^ _2181208_/ZN (XNOR2_X2)\n                                         _0146260_ (net)\n                  0.05    0.00    4.82 ^ _2181966_/A2 (NAND2_X1)\n     4    8.08    0.02    0.04    4.86 v _2181966_/ZN (NAND2_X1)\n                                         _0147018_ (net)\n                  0.02    0.00    4.86 v _2181968_/A (XOR2_X1)\n     2    4.19    0.01    0.06    4.92 v _2181968_/Z (XOR2_X1)\n                                         _0147020_ (net)\n                  0.01    0.00    4.92 v _2181970_/A (XNOR2_X1)\n     2    8.69    0.05    0.06    4.98 ^ _2181970_/ZN (XNOR2_X1)\n                                         _0147022_ (net)\n                  0.05    0.00    4.98 ^ _2181971_/B (XNOR2_X2)\n     3    8.15    0.03    0.05    5.03 ^ _2181971_/ZN (XNOR2_X2)\n                                         _0147023_ (net)\n                  0.03    0.00    5.03 ^ _2181974_/A (XOR2_X1)\n     3    6.04    0.04    0.07    5.11 ^ _2181974_/Z (XOR2_X1)\n                                         _0147026_ (net)\n                  0.04    0.00    5.11 ^ _2182051_/A1 (NAND3_X1)\n     3    8.38    0.03    0.05    5.16 v _2182051_/ZN (NAND3_X1)\n                                         _0147103_ (net)\n                  0.03    0.00    5.16 v _2182052_/C2 (AOI211_X2)\n     3    6.87    0.05    0.07    5.22 ^ _2182052_/ZN (AOI211_X2)\n                                         _0147104_ (net)\n                  0.05    0.00    5.22 ^ _2182057_/A2 (NOR3_X1)\n     2    4.84    0.02    0.02    5.25 v _2182057_/ZN (NOR3_X1)\n                                         _0147109_ (net)\n                  0.02    0.00    5.25 v _2182067_/A (AOI211_X2)\n     2    5.46    0.04    0.08    5.33 ^ _2182067_/ZN (AOI211_X2)\n                                         _0147119_ (net)\n                  0.04    0.00    5.33 ^ place386703/A (BUF_X1)\n     3    6.42    0.02    0.04    5.37 ^ place386703/Z (BUF_X1)\n                                         net386435 (net)\n                  0.02    0.00    5.37 ^ _2182215_/A1 (OAI22_X2)\n     5   12.89    0.02    0.03    5.40 v _2182215_/ZN (OAI22_X2)\n                                         _0147267_ (net)\n                  0.02    0.00    5.40 v place385640/A (BUF_X2)\n     3    6.17    0.01    0.04    5.43 v place385640/Z (BUF_X2)\n                                         net385372 (net)\n                  0.01    0.00    5.43 v _2182218_/B (AOI211_X2)\n     2    8.33    0.05    0.08    5.51 ^ _2182218_/ZN (AOI211_X2)\n                                         _0147270_ (net)\n                  0.05    0.00    5.51 ^ _2182221_/A3 (NOR4_X2)\n     1    5.20    0.02    0.02    5.54 v _2182221_/ZN (NOR4_X2)\n                                         _0147273_ (net)\n                  0.02    0.00    5.54 v _2182222_/B (XNOR2_X2)\n     4   11.62    0.02    0.05    5.59 v _2182222_/ZN (XNOR2_X2)\n                                         _0147274_ (net)\n                  0.02    0.00    5.59 v _2182223_/B (XNOR2_X2)\n     4    6.96    0.02    0.05    5.63 v _2182223_/ZN (XNOR2_X2)\n                                         _0147275_ (net)\n                  0.02    0.00    5.63 v place381903/A (BUF_X1)\n     4    6.79    0.01    0.04    5.67 v place381903/Z (BUF_X1)\n                                         net381635 (net)\n                  0.01    0.00    5.67 v _2182352_/A2 (OR3_X2)\n     2    3.32    0.01    0.07    5.75 v _2182352_/ZN (OR3_X2)\n                                         _0147404_ (net)\n                  0.01    0.00    5.75 v _2182353_/C2 (OAI221_X1)\n     2    3.78    0.05    0.05    5.79 ^ _2182353_/ZN (OAI221_X1)\n                                         _0147405_ (net)\n                  0.05    0.00    5.79 ^ _2182430_/A (XNOR2_X1)\n     4    9.81    0.05    0.07    5.86 ^ _2182430_/ZN (XNOR2_X1)\n                                         _0147482_ (net)\n                  0.05    0.00    5.86 ^ place378483/A (BUF_X2)\n     2    4.26    0.01    0.03    5.89 ^ place378483/Z (BUF_X2)\n                                         net378215 (net)\n                  0.01    0.00    5.89 ^ place378482/A (BUF_X1)\n     4    9.89    0.02    0.04    5.93 ^ place378482/Z (BUF_X1)\n                                         net378214 (net)\n                  0.02    0.00    5.94 ^ _2183785_/A2 (NOR2_X1)\n     1    2.95    0.01    0.02    5.95 v _2183785_/ZN (NOR2_X1)\n                                         _0148837_ (net)\n                  0.01    0.00    5.95 v _2183786_/B (XNOR2_X1)\n     2    5.15    0.03    0.05    6.00 ^ _2183786_/ZN (XNOR2_X1)\n                                         _0148838_ (net)\n                  0.03    0.00    6.00 ^ _2183828_/A (XNOR2_X1)\n     2    3.94    0.03    0.05    6.05 ^ _2183828_/ZN (XNOR2_X1)\n                                         _0148880_ (net)\n                  0.03    0.00    6.05 ^ _2183836_/A (XOR2_X1)\n     2    4.72    0.04    0.07    6.12 ^ _2183836_/Z (XOR2_X1)\n                                         _0148888_ (net)\n                  0.04    0.00    6.12 ^ _2183873_/A (XNOR2_X1)\n     2    3.74    0.03    0.05    6.17 ^ _2183873_/ZN (XNOR2_X1)\n                                         _0148925_ (net)\n                  0.03    0.00    6.17 ^ _2183890_/A (XNOR2_X1)\n     2    4.17    0.03    0.05    6.22 ^ _2183890_/ZN (XNOR2_X1)\n                                         _0148942_ (net)\n                  0.03    0.00    6.22 ^ place369792/A (BUF_X2)\n     1    2.48    0.01    0.03    6.25 ^ place369792/Z (BUF_X2)\n                                         net369524 (net)\n                  0.01    0.00    6.25 ^ _2183922_/A (XNOR2_X1)\n     2    3.78    0.03    0.04    6.29 ^ _2183922_/ZN (XNOR2_X1)\n                                         _0148974_ (net)\n                  0.03    0.00    6.29 ^ _2183955_/A (XNOR2_X1)\n     2    4.57    0.03    0.05    6.34 ^ _2183955_/ZN (XNOR2_X1)\n                                         _0149007_ (net)\n                  0.03    0.00    6.34 ^ _2183973_/A1 (NOR2_X1)\n     1    2.07    0.01    0.01    6.35 v _2183973_/ZN (NOR2_X1)\n                                         _0149025_ (net)\n                  0.01    0.00    6.35 v _2183974_/A2 (NOR2_X1)\n     2    4.70    0.03    0.04    6.39 ^ _2183974_/ZN (NOR2_X1)\n                                         _0149026_ (net)\n                  0.03    0.00    6.39 ^ _2183976_/B (XOR2_X1)\n     2    4.83    0.04    0.07    6.46 ^ _2183976_/Z (XOR2_X1)\n                                         _0149028_ (net)\n                  0.04    0.00    6.46 ^ _2183993_/A (XNOR2_X1)\n     2    3.84    0.03    0.05    6.51 ^ _2183993_/ZN (XNOR2_X1)\n                                         _0149045_ (net)\n                  0.03    0.00    6.51 ^ _2184056_/A (XOR2_X1)\n     2    8.56    0.05    0.08    6.60 ^ _2184056_/Z (XOR2_X1)\n                                         _0149108_ (net)\n                  0.05    0.00    6.60 ^ _2184237_/A (XNOR2_X2)\n     5   10.95    0.04    0.06    6.65 ^ _2184237_/ZN (XNOR2_X2)\n                                         _0149289_ (net)\n                  0.04    0.00    6.65 ^ place364706/A (BUF_X1)\n     1    1.85    0.01    0.03    6.68 ^ place364706/Z (BUF_X1)\n                                         net364438 (net)\n                  0.01    0.00    6.68 ^ _2184462_/B2 (OAI21_X1)\n     2    3.42    0.01    0.02    6.70 v _2184462_/ZN (OAI21_X1)\n                                         _0149514_ (net)\n                  0.01    0.00    6.70 v _2184464_/A (AOI21_X1)\n     2    5.36    0.04    0.06    6.76 ^ _2184464_/ZN (AOI21_X1)\n                                         _0149516_ (net)\n                  0.04    0.00    6.76 ^ _2184467_/A (OAI21_X1)\n     2    4.27    0.02    0.03    6.79 v _2184467_/ZN (OAI21_X1)\n                                         _0149519_ (net)\n                  0.02    0.00    6.79 v place363120/A (BUF_X1)\n     1    1.85    0.01    0.03    6.82 v place363120/Z (BUF_X1)\n                                         net362852 (net)\n                  0.01    0.00    6.82 v _2184473_/A1 (NOR3_X1)\n     2    5.32    0.05    0.06    6.88 ^ _2184473_/ZN (NOR3_X1)\n                                         _0149525_ (net)\n                  0.05    0.00    6.89 ^ _2184474_/B (XNOR2_X1)\n     4    5.41    0.02    0.04    6.92 v _2184474_/ZN (XNOR2_X1)\n                                         _0149526_ (net)\n                  0.02    0.00    6.92 v _2184475_/B (MUX2_X1)\n     2    3.20    0.01    0.07    6.99 v _2184475_/Z (MUX2_X1)\n                                         _0149527_ (net)\n                  0.01    0.00    6.99 v _2184592_/B (MUX2_X1)\n     2    3.49    0.01    0.06    7.05 v _2184592_/Z (MUX2_X1)\n                                         _0149644_ (net)\n                  0.01    0.00    7.05 v _2184654_/B (MUX2_X1)\n     2    2.70    0.01    0.06    7.12 v _2184654_/Z (MUX2_X1)\n                                         _0149706_ (net)\n                  0.01    0.00    7.12 v _2184655_/B (MUX2_X1)\n     1    1.27    0.01    0.06    7.17 v _2184655_/Z (MUX2_X1)\n                                         _0149707_ (net)\n                  0.01    0.00    7.17 v _2184658_/A (MUX2_X1)\n     2    2.74    0.01    0.06    7.23 v _2184658_/Z (MUX2_X1)\n                                         _0149710_ (net)\n                  0.01    0.00    7.23 v _2184659_/B (MUX2_X1)\n     2    5.65    0.01    0.07    7.30 v _2184659_/Z (MUX2_X1)\n                                         _0149711_ (net)\n                  0.01    0.00    7.30 v _2184916_/A4 (NOR4_X2)\n     1    3.27    0.04    0.08    7.38 ^ _2184916_/ZN (NOR4_X2)\n                                         _0149968_ (net)\n                  0.04    0.00    7.38 ^ place360535/A (BUF_X2)\n     4    8.12    0.01    0.03    7.42 ^ place360535/Z (BUF_X2)\n                                         net360267 (net)\n                  0.01    0.00    7.42 ^ _2184941_/A4 (NAND4_X1)\n     2    3.62    0.02    0.04    7.46 v _2184941_/ZN (NAND4_X1)\n                                         _0149993_ (net)\n                  0.02    0.00    7.46 v place359917/A (BUF_X1)\n     2    2.80    0.01    0.04    7.49 v place359917/Z (BUF_X1)\n                                         net359649 (net)\n                  0.01    0.00    7.49 v _2185068_/A1 (NOR2_X1)\n     1    7.53    0.04    0.05    7.54 ^ _2185068_/ZN (NOR2_X1)\n                                         _0150120_ (net)\n                  0.04    0.00    7.55 ^ _2185069_/B (XNOR2_X1)\n     1    1.09    0.01    0.02    7.57 v _2185069_/ZN (XNOR2_X1)\n                                         _0150121_ (net)\n                  0.01    0.00    7.57 v _2185070_/B (MUX2_X1)\n     3    5.96    0.01    0.07    7.64 v _2185070_/Z (MUX2_X1)\n                                         _0150122_ (net)\n                  0.01    0.00    7.64 v _2185071_/A4 (NOR4_X1)\n     1    1.87    0.04    0.08    7.72 ^ _2185071_/ZN (NOR4_X1)\n                                         _0150123_ (net)\n                  0.04    0.00    7.72 ^ _2185094_/A2 (AND4_X1)\n     1    6.31    0.02    0.08    7.80 ^ _2185094_/ZN (AND4_X1)\n                                         _0150146_ (net)\n                  0.02    0.00    7.80 ^ _2185095_/A4 (NAND4_X1)\n     2    7.48    0.03    0.05    7.86 v _2185095_/ZN (NAND4_X1)\n                                         _0150147_ (net)\n                  0.03    0.00    7.86 v _2185257_/B (XNOR2_X1)\n     1    2.12    0.01    0.05    7.91 v _2185257_/ZN (XNOR2_X1)\n                                         _0150305_ (net)\n                  0.01    0.00    7.91 v place358530/A (BUF_X2)\n     7    9.68    0.01    0.03    7.94 v place358530/Z (BUF_X2)\n                                         net358262 (net)\n                  0.01    0.00    7.94 v _2185384_/A1 (AND2_X1)\n     1    2.09    0.01    0.03    7.97 v _2185384_/ZN (AND2_X1)\n                                         _0150425_ (net)\n                  0.01    0.00    7.97 v _2185385_/B2 (OAI21_X1)\n     1    3.75    0.03    0.04    8.01 ^ _2185385_/ZN (OAI21_X1)\n                                         _0150426_ (net)\n                  0.03    0.00    8.01 ^ _2185397_/B1 (AOI21_X2)\n     1   11.08    0.02    0.03    8.04 v _2185397_/ZN (AOI21_X2)\n                                         _0150438_ (net)\n                  0.02    0.00    8.04 v place358391/A (BUF_X4)\n     1    1.89    0.00    0.03    8.07 v place358391/Z (BUF_X4)\n                                         net358123 (net)\n                  0.00    0.00    8.07 v _2185399_/B1 (OAI21_X1)\n     1    4.81    0.03    0.04    8.11 ^ _2185399_/ZN (OAI21_X1)\n                                         _0150440_ (net)\n                  0.03    0.00    8.11 ^ place358306/A (BUF_X4)\n     1   14.57    0.01    0.03    8.14 ^ place358306/Z (BUF_X4)\n                                         net358038 (net)\n                  0.01    0.00    8.14 ^ _2185400_/B1 (OAI21_X1)\n     1    2.26    0.02    0.02    8.16 v _2185400_/ZN (OAI21_X1)\n                                         _0024592_ (net)\n                  0.02    0.00    8.16 v u_vec.wr_data_r[132]$_DFFE_PN0P_/D (DFFR_X1)\n                                  8.16   data arrival time\n\n                          3.00    3.00   clock clk (rise edge)\n                          0.00    3.00   clock source latency\n     1   43.07    0.00    0.00    3.00 ^ clk (in)\n                                         clk (net)\n                  0.01    0.01    3.01 ^ wire638656/A (BUF_X8)\n     1   45.53    0.01    0.03    3.03 ^ wire638656/Z (BUF_X8)\n                                         net638388 (net)\n                  0.02    0.01    3.05 ^ wire638655/A (BUF_X16)\n     1   88.89    0.01    0.03    3.07 ^ wire638655/Z (BUF_X16)\n                                         net638387 (net)\n                  0.05    0.04    3.11 ^ wire638654/A (BUF_X32)\n     1   90.83    0.01    0.03    3.14 ^ wire638654/Z (BUF_X32)\n                                         net638386 (net)\n                  0.05    0.04    3.18 ^ wire638653/A (BUF_X32)\n     1   65.17    0.01    0.03    3.21 ^ wire638653/Z (BUF_X32)\n                                         net638385 (net)\n                  0.03    0.02    3.23 ^ clkbuf_0_clk/A (CLKBUF_X3)\n     2   44.33    0.03    0.07    3.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n                                         clknet_0_clk (net)\n                  0.04    0.00    3.30 ^ clkbuf_1_0_0_clk/A (CLKBUF_X3)\n     1   29.03    0.02    0.06    3.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_0_clk (net)\n                  0.02    0.01    3.37 ^ clkbuf_1_0_1_clk/A (CLKBUF_X3)\n     2   35.18    0.03    0.06    3.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_1_clk (net)\n                  0.03    0.01    3.43 ^ clkbuf_2_1_0_clk/A (CLKBUF_X3)\n     1   27.71    0.02    0.06    3.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_0_clk (net)\n                  0.02    0.01    3.49 ^ clkbuf_2_1_1_clk/A (CLKBUF_X3)\n     1   30.38    0.02    0.06    3.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_1_clk (net)\n                  0.03    0.01    3.56 ^ clkbuf_2_1_2_clk/A (CLKBUF_X3)\n     2   45.45    0.04    0.07    3.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_2_clk (net)\n                  0.04    0.01    3.63 ^ clkbuf_3_2_0_clk/A (CLKBUF_X3)\n     2   42.03    0.03    0.07    3.70 ^ clkbuf_3_2_0_clk/Z (CLKBUF_X3)\n                                         clknet_3_2_0_clk (net)\n                  0.03    0.01    3.71 ^ clkbuf_4_5_0_clk/A (CLKBUF_X3)\n     2   35.12    0.03    0.06    3.77 ^ clkbuf_4_5_0_clk/Z (CLKBUF_X3)\n                                         clknet_4_5_0_clk (net)\n                  0.03    0.01    3.77 ^ clkbuf_5_11_0_clk/A (CLKBUF_X3)\n     2   39.57    0.03    0.06    3.84 ^ clkbuf_5_11_0_clk/Z (CLKBUF_X3)\n                                         clknet_5_11_0_clk (net)\n                  0.03    0.01    3.84 ^ clkbuf_6_23_0_clk/A (CLKBUF_X3)\n     4   41.19    0.03    0.07    3.91 ^ clkbuf_6_23_0_clk/Z (CLKBUF_X3)\n                                         clknet_6_23_0_clk (net)\n                  0.03    0.00    3.92 ^ clkbuf_8_93_0_clk/A (CLKBUF_X3)\n     8   40.08    0.03    0.07    3.98 ^ clkbuf_8_93_0_clk/Z (CLKBUF_X3)\n                                         clknet_8_93_0_clk (net)\n                  0.03    0.00    3.99 ^ clkbuf_11_751__f_clk/A (CLKBUF_X3)\n     3   12.62    0.01    0.05    4.03 ^ clkbuf_11_751__f_clk/Z (CLKBUF_X3)\n                                         clknet_11_751__leaf_clk (net)\n                  0.01    0.00    4.03 ^ clkbuf_leaf_7914_clk/A (CLKBUF_X3)\n     3    8.67    0.01    0.04    4.07 ^ clkbuf_leaf_7914_clk/Z (CLKBUF_X3)\n                                         clknet_leaf_7914_clk (net)\n                  0.01    0.00    4.07 ^ u_vec.wr_data_r[132]$_DFFE_PN0P_/CK (DFFR_X1)\n                          0.00    4.07   clock reconvergence pessimism\n                         -0.04    4.03   library setup time\n                                  4.03   data required time\n-----------------------------------------------------------------------------\n                                  4.03   data required time\n                                 -8.16   data arrival time\n-----------------------------------------------------------------------------\n                                 -4.13   slack (VIOLATED)"
+    },
+    {
+      "startpoint": "u_vec.u_f0.rp[1]$_DFFE_PN0P_",
+      "endpoint": "u_vec.wr_data_r[132]$_DFFE_PN0P_",
+      "check_kind": "setup",
+      "register_to_register": true,
+      "slack_ns": -4.13,
+      "report": "Startpoint: u_vec.u_f0.rp[1]$_DFFE_PN0P_\n            (rising edge-triggered flip-flop clocked by clk)\nEndpoint: u_vec.wr_data_r[132]$_DFFE_PN0P_\n          (rising edge-triggered flip-flop clocked by clk)\nPath Group: clk\nPath Type: max\n\n  Delay    Time   Description\n---------------------------------------------------------\n   0.00    0.00   clock clk (rise edge)\n   0.00    0.00   clock source latency\n   0.00    0.00 ^ clk (in)\n   0.03    0.03 ^ wire638656/Z (BUF_X8)\n   0.04    0.07 ^ wire638655/Z (BUF_X16)\n   0.07    0.14 ^ wire638654/Z (BUF_X32)\n   0.07    0.21 ^ wire638653/Z (BUF_X32)\n   0.09    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n   0.06    0.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n   0.07    0.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n   0.06    0.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n   0.06    0.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n   0.08    0.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n   0.07    0.70 ^ clkbuf_3_3_0_clk/Z (CLKBUF_X3)\n   0.07    0.76 ^ clkbuf_4_7_0_clk/Z (CLKBUF_X3)\n   0.07    0.83 ^ clkbuf_5_15_0_clk/Z (CLKBUF_X3)\n   0.07    0.90 ^ clkbuf_6_31_0_clk/Z (CLKBUF_X3)\n   0.07    0.97 ^ clkbuf_8_127_0_clk/Z (CLKBUF_X3)\n   0.05    1.02 ^ clkbuf_11_1017__f_clk/Z (CLKBUF_X3)\n   0.04    1.06 ^ clkbuf_leaf_7676_clk/Z (CLKBUF_X3)\n   0.00    1.06 ^ u_vec.u_f0.rp[1]$_DFFE_PN0P_/CK (DFFR_X2)\n   0.15    1.21 ^ u_vec.u_f0.rp[1]$_DFFE_PN0P_/Q (DFFR_X2)\n   0.05    1.25 ^ place617704/Z (BUF_X4)\n   0.14    1.40 ^ place617685/Z (BUF_X2)\n   0.10    1.50 ^ place617682/Z (BUF_X1)\n   0.10    1.60 v _1812822_/Z (MUX2_X2)\n   0.04    1.64 v place609339/Z (BUF_X1)\n   0.03    1.67 v place609337/Z (BUF_X4)\n   0.02    1.69 ^ _2176536_/ZN (NAND2_X1)\n   0.05    1.74 ^ _2176540_/ZN (XNOR2_X1)\n   0.06    1.80 ^ _2176601_/Z (XOR2_X1)\n   0.05    1.85 ^ _2176609_/ZN (XNOR2_X1)\n   0.06    1.91 ^ _2176669_/Z (XOR2_X1)\n   0.05    1.96 ^ _2176686_/ZN (XNOR2_X1)\n   0.05    2.01 ^ _2176741_/ZN (XNOR2_X1)\n   0.05    2.06 ^ _2176774_/ZN (XNOR2_X1)\n   0.06    2.12 ^ _2176814_/Z (XOR2_X1)\n   0.06    2.18 ^ _2176873_/ZN (XNOR2_X1)\n   0.06    2.24 ^ _2176894_/Z (XOR2_X1)\n   0.06    2.31 ^ _2176966_/Z (XOR2_X1)\n   0.05    2.36 ^ _2176972_/ZN (XNOR2_X1)\n   0.03    2.39 ^ place509678/Z (BUF_X2)\n   0.07    2.45 ^ _2178318_/Z (XOR2_X1)\n   0.06    2.51 v _2178500_/ZN (NAND4_X1)\n   0.05    2.56 ^ _2178656_/ZN (NOR2_X1)\n   0.03    2.59 v _2178658_/ZN (NAND2_X1)\n   0.12    2.70 v _2178660_/ZN (OR4_X1)\n   0.04    2.74 ^ _2178661_/ZN (NAND3_X1)\n   0.03    2.77 v _2178890_/ZN (XNOR2_X1)\n   0.06    2.83 v _2178951_/Z (MUX2_X1)\n   0.06    2.90 v _2178982_/Z (MUX2_X1)\n   0.06    2.96 v _2179288_/Z (MUX2_X1)\n   0.06    3.02 v _2179289_/Z (MUX2_X1)\n   0.06    3.08 v _2179290_/Z (MUX2_X1)\n   0.08    3.16 v _2179291_/Z (MUX2_X1)\n   0.11    3.27 ^ _2179298_/ZN (NOR4_X1)\n   0.03    3.30 ^ place457501/Z (BUF_X2)\n   0.03    3.33 ^ place457500/Z (BUF_X1)\n   0.03    3.36 v _2179330_/ZN (NAND4_X1)\n   0.09    3.45 ^ _2179508_/ZN (NOR3_X1)\n   0.03    3.48 ^ place450180/Z (BUF_X2)\n   0.02    3.50 v _2179509_/ZN (XNOR2_X1)\n   0.07    3.57 v _2179510_/Z (MUX2_X1)\n   0.09    3.65 v _2179687_/ZN (OR4_X1)\n   0.10    3.75 ^ _2179693_/ZN (AOI221_X1)\n   0.04    3.79 ^ place437609/Z (BUF_X2)\n   0.04    3.82 v _2179705_/ZN (OAI221_X2)\n   0.04    3.86 v place435775/Z (BUF_X4)\n   0.07    3.93 v _2179717_/Z (XOR2_X2)\n   0.04    3.97 v place433986/Z (BUF_X4)\n   0.03    4.00 ^ _2179718_/ZN (AOI21_X4)\n   0.04    4.04 ^ place431116/Z (BUF_X2)\n   0.05    4.10 ^ place431115/Z (BUF_X2)\n   0.04    4.14 ^ place431114/Z (BUF_X1)\n   0.03    4.17 v _2180034_/ZN (NAND3_X1)\n   0.03    4.20 v place425716/Z (BUF_X2)\n   0.06    4.26 ^ _2180895_/ZN (AOI22_X1)\n   0.02    4.28 v _2180897_/ZN (AOI21_X1)\n   0.06    4.34 v _2180899_/Z (MUX2_X1)\n   0.06    4.40 v _2180900_/Z (MUX2_X1)\n   0.06    4.46 v _2180914_/Z (MUX2_X1)\n   0.08    4.54 v _2180935_/Z (MUX2_X1)\n   0.05    4.59 v _2180983_/ZN (AND3_X1)\n   0.05    4.64 v _2180985_/ZN (OR2_X2)\n   0.03    4.67 v place407485/Z (BUF_X1)\n   0.02    4.69 ^ _2181205_/ZN (NAND2_X1)\n   0.05    4.74 v _2181207_/ZN (OAI221_X1)\n   0.07    4.82 ^ _2181208_/ZN (XNOR2_X2)\n   0.04    4.86 v _2181966_/ZN (NAND2_X1)\n   0.06    4.92 v _2181968_/Z (XOR2_X1)\n   0.06    4.98 ^ _2181970_/ZN (XNOR2_X1)\n   0.05    5.03 ^ _2181971_/ZN (XNOR2_X2)\n   0.07    5.11 ^ _2181974_/Z (XOR2_X1)\n   0.05    5.16 v _2182051_/ZN (NAND3_X1)\n   0.07    5.22 ^ _2182052_/ZN (AOI211_X2)\n   0.02    5.25 v _2182057_/ZN (NOR3_X1)\n   0.08    5.33 ^ _2182067_/ZN (AOI211_X2)\n   0.04    5.37 ^ place386703/Z (BUF_X1)\n   0.03    5.40 v _2182215_/ZN (OAI22_X2)\n   0.04    5.43 v place385640/Z (BUF_X2)\n   0.08    5.51 ^ _2182218_/ZN (AOI211_X2)\n   0.02    5.54 v _2182221_/ZN (NOR4_X2)\n   0.05    5.59 v _2182222_/ZN (XNOR2_X2)\n   0.05    5.63 v _2182223_/ZN (XNOR2_X2)\n   0.04    5.67 v place381903/Z (BUF_X1)\n   0.07    5.75 v _2182352_/ZN (OR3_X2)\n   0.05    5.79 ^ _2182353_/ZN (OAI221_X1)\n   0.07    5.86 ^ _2182430_/ZN (XNOR2_X1)\n   0.03    5.89 ^ place378483/Z (BUF_X2)\n   0.04    5.93 ^ place378482/Z (BUF_X1)\n   0.02    5.95 v _2183785_/ZN (NOR2_X1)\n   0.05    6.00 ^ _2183786_/ZN (XNOR2_X1)\n   0.05    6.05 ^ _2183828_/ZN (XNOR2_X1)\n   0.07    6.12 ^ _2183836_/Z (XOR2_X1)\n   0.05    6.17 ^ _2183873_/ZN (XNOR2_X1)\n   0.05    6.22 ^ _2183890_/ZN (XNOR2_X1)\n   0.03    6.25 ^ place369792/Z (BUF_X2)\n   0.04    6.29 ^ _2183922_/ZN (XNOR2_X1)\n   0.05    6.34 ^ _2183955_/ZN (XNOR2_X1)\n   0.01    6.35 v _2183973_/ZN (NOR2_X1)\n   0.04    6.39 ^ _2183974_/ZN (NOR2_X1)\n   0.07    6.46 ^ _2183976_/Z (XOR2_X1)\n   0.05    6.51 ^ _2183993_/ZN (XNOR2_X1)\n   0.08    6.60 ^ _2184056_/Z (XOR2_X1)\n   0.06    6.65 ^ _2184237_/ZN (XNOR2_X2)\n   0.03    6.68 ^ place364706/Z (BUF_X1)\n   0.02    6.70 v _2184462_/ZN (OAI21_X1)\n   0.06    6.76 ^ _2184464_/ZN (AOI21_X1)\n   0.03    6.79 v _2184467_/ZN (OAI21_X1)\n   0.03    6.82 v place363120/Z (BUF_X1)\n   0.06    6.88 ^ _2184473_/ZN (NOR3_X1)\n   0.04    6.92 v _2184474_/ZN (XNOR2_X1)\n   0.07    6.99 v _2184475_/Z (MUX2_X1)\n   0.06    7.05 v _2184592_/Z (MUX2_X1)\n   0.06    7.12 v _2184654_/Z (MUX2_X1)\n   0.06    7.17 v _2184655_/Z (MUX2_X1)\n   0.06    7.23 v _2184658_/Z (MUX2_X1)\n   0.07    7.30 v _2184659_/Z (MUX2_X1)\n   0.08    7.38 ^ _2184916_/ZN (NOR4_X2)\n   0.03    7.42 ^ place360535/Z (BUF_X2)\n   0.04    7.46 v _2184941_/ZN (NAND4_X1)\n   0.04    7.49 v place359917/Z (BUF_X1)\n   0.05    7.54 ^ _2185068_/ZN (NOR2_X1)\n   0.02    7.57 v _2185069_/ZN (XNOR2_X1)\n   0.07    7.64 v _2185070_/Z (MUX2_X1)\n   0.08    7.72 ^ _2185071_/ZN (NOR4_X1)\n   0.08    7.80 ^ _2185094_/ZN (AND4_X1)\n   0.06    7.86 v _2185095_/ZN (NAND4_X1)\n   0.05    7.91 v _2185257_/ZN (XNOR2_X1)\n   0.03    7.94 v place358530/Z (BUF_X2)\n   0.03    7.97 v _2185384_/ZN (AND2_X1)\n   0.04    8.01 ^ _2185385_/ZN (OAI21_X1)\n   0.03    8.04 v _2185397_/ZN (AOI21_X2)\n   0.03    8.07 v place358391/Z (BUF_X4)\n   0.04    8.11 ^ _2185399_/ZN (OAI21_X1)\n   0.03    8.14 ^ place358306/Z (BUF_X4)\n   0.02    8.16 v _2185400_/ZN (OAI21_X1)\n   0.00    8.16 v u_vec.wr_data_r[132]$_DFFE_PN0P_/D (DFFR_X1)\n           8.16   data arrival time\n\n   3.00    3.00   clock clk (rise edge)\n   0.00    3.00   clock source latency\n   0.00    3.00 ^ clk (in)\n   0.03    3.03 ^ wire638656/Z (BUF_X8)\n   0.04    3.07 ^ wire638655/Z (BUF_X16)\n   0.07    3.14 ^ wire638654/Z (BUF_X32)\n   0.07    3.21 ^ wire638653/Z (BUF_X32)\n   0.09    3.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n   0.06    3.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n   0.07    3.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n   0.06    3.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n   0.06    3.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n   0.08    3.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n   0.07    3.70 ^ clkbuf_3_2_0_clk/Z (CLKBUF_X3)\n   0.07    3.77 ^ clkbuf_4_5_0_clk/Z (CLKBUF_X3)\n   0.07    3.84 ^ clkbuf_5_11_0_clk/Z (CLKBUF_X3)\n   0.07    3.91 ^ clkbuf_6_23_0_clk/Z (CLKBUF_X3)\n   0.07    3.98 ^ clkbuf_8_93_0_clk/Z (CLKBUF_X3)\n   0.05    4.03 ^ clkbuf_11_751__f_clk/Z (CLKBUF_X3)\n   0.04    4.07 ^ clkbuf_leaf_7914_clk/Z (CLKBUF_X3)\n   0.00    4.07 ^ u_vec.wr_data_r[132]$_DFFE_PN0P_/CK (DFFR_X1)\n   0.00    4.07   clock reconvergence pessimism\n  -0.04    4.03   library setup time\n           4.03   data required time\n---------------------------------------------------------\n           4.03   data required time\n          -8.16   data arrival time\n---------------------------------------------------------\n          -4.13   slack (VIOLATED)"
+    }
+  ],
+  "critical_min_paths": [
+    {
+      "startpoint": "rst_n (input port clocked by clk)",
+      "endpoint": "u_perf.perf[1388]$_DFF_PN0_",
+      "check_kind": "removal",
+      "register_to_register": false,
+      "slack_ns": -0.02,
+      "report": "Startpoint: rst_n (input port clocked by clk)\nEndpoint: u_perf.perf[1388]$_DFF_PN0_\n          (removal check against rising-edge clock clk)\nPath Group: asynchronous\nPath Type: min\n\nFanout     Cap    Slew   Delay    Time   Description\n-----------------------------------------------------------------------------\n                          0.00    0.00   clock clk (rise edge)\n                          0.00    0.00   clock network delay (propagated)\n                          0.60    0.60 ^ input external delay\n     1    1.83    0.00    0.00    0.60 ^ rst_n (in)\n                                         rst_n (net)\n                  0.00    0.00    0.60 ^ hold638801/A (CLKBUF_X1)\n     1    1.06    0.01    0.02    0.62 ^ hold638801/Z (CLKBUF_X1)\n                                         net638534 (net)\n                  0.01    0.00    0.62 ^ hold638794/A (CLKBUF_X1)\n     1    1.04    0.01    0.03    0.65 ^ hold638794/Z (CLKBUF_X1)\n                                         net638527 (net)\n                  0.01    0.00    0.65 ^ hold638802/A (CLKBUF_X1)\n     1    1.34    0.01    0.03    0.68 ^ hold638802/Z (CLKBUF_X1)\n                                         net638535 (net)\n                  0.01    0.00    0.68 ^ hold638791/A (CLKBUF_X1)\n     1    1.03    0.01    0.03    0.70 ^ hold638791/Z (CLKBUF_X1)\n                                         net638524 (net)\n                  0.01    0.00    0.70 ^ hold638803/A (CLKBUF_X1)\n     1    1.07    0.01    0.03    0.73 ^ hold638803/Z (CLKBUF_X1)\n                                         net638536 (net)\n                  0.01    0.00    0.73 ^ hold638795/A (CLKBUF_X1)\n     1    1.31    0.01    0.03    0.75 ^ hold638795/Z (CLKBUF_X1)\n                                         net638528 (net)\n                  0.01    0.00    0.75 ^ hold638804/A (CLKBUF_X1)\n     1    1.98    0.01    0.03    0.78 ^ hold638804/Z (CLKBUF_X1)\n                                         net638537 (net)\n                  0.01    0.00    0.78 ^ input2628/A (CLKBUF_X3)\n     1    3.86    0.01    0.03    0.81 ^ input2628/Z (CLKBUF_X3)\n                                         net2627 (net)\n                  0.01    0.00    0.81 ^ hold638805/A (CLKBUF_X1)\n     1    4.75    0.01    0.04    0.85 ^ hold638805/Z (CLKBUF_X1)\n                                         net638538 (net)\n                  0.01    0.00    0.85 ^ hold638796/A (CLKBUF_X1)\n     1    4.19    0.01    0.04    0.89 ^ hold638796/Z (CLKBUF_X1)\n                                         net638529 (net)\n                  0.01    0.00    0.89 ^ hold638806/A (CLKBUF_X1)\n     1    4.15    0.01    0.04    0.93 ^ hold638806/Z (CLKBUF_X1)\n                                         net638539 (net)\n                  0.01    0.00    0.93 ^ hold638792/A (CLKBUF_X1)\n     1   10.06    0.02    0.05    0.98 ^ hold638792/Z (CLKBUF_X1)\n                                         net638525 (net)\n                  0.02    0.00    0.98 ^ hold638797/A (CLKBUF_X1)\n     2   50.17    0.11    0.15    1.13 ^ hold638797/Z (CLKBUF_X1)\n                                         net638530 (net)\n                  0.11    0.01    1.14 ^ place635920/A (BUF_X8)\n     5   85.87    0.01    0.04    1.17 ^ place635920/Z (BUF_X8)\n                                         net635652 (net)\n                  0.10    0.08    1.25 ^ place635748/A (BUF_X2)\n     9   31.46    0.04    0.06    1.32 ^ place635748/Z (BUF_X2)\n                                         net635480 (net)\n                  0.04    0.00    1.32 ^ place635747/A (BUF_X8)\n   140  334.81    0.03    0.04    1.36 ^ place635747/Z (BUF_X8)\n                                         net635479 (net)\n                  0.21    0.16    1.53 ^ u_perf.perf[1388]$_DFF_PN0_/RN (DFFR_X1)\n                                  1.53   data arrival time\n\n                          0.00    0.00   clock clk (rise edge)\n                          0.00    0.00   clock source latency\n     1   43.07    0.00    0.00    0.00 ^ clk (in)\n                                         clk (net)\n                  0.01    0.01    0.01 ^ wire638656/A (BUF_X8)\n     1   45.53    0.01    0.03    0.03 ^ wire638656/Z (BUF_X8)\n                                         net638388 (net)\n                  0.02    0.01    0.05 ^ wire638655/A (BUF_X16)\n     1   88.89    0.01    0.03    0.07 ^ wire638655/Z (BUF_X16)\n                                         net638387 (net)\n                  0.05    0.04    0.11 ^ wire638654/A (BUF_X32)\n     1   90.83    0.01    0.03    0.14 ^ wire638654/Z (BUF_X32)\n                                         net638386 (net)\n                  0.05    0.04    0.18 ^ wire638653/A (BUF_X32)\n     1   65.17    0.01    0.03    0.21 ^ wire638653/Z (BUF_X32)\n                                         net638385 (net)\n                  0.03    0.02    0.23 ^ clkbuf_0_clk/A (CLKBUF_X3)\n     2   44.33    0.03    0.07    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n                                         clknet_0_clk (net)\n                  0.04    0.00    0.30 ^ clkbuf_1_1_0_clk/A (CLKBUF_X3)\n     1   30.84    0.03    0.06    0.36 ^ clkbuf_1_1_0_clk/Z (CLKBUF_X3)\n                                         clknet_1_1_0_clk (net)\n                  0.03    0.01    0.37 ^ clkbuf_1_1_1_clk/A (CLKBUF_X3)\n     2   34.97    0.03    0.06    0.43 ^ clkbuf_1_1_1_clk/Z (CLKBUF_X3)\n                                         clknet_1_1_1_clk (net)\n                  0.03    0.01    0.43 ^ clkbuf_2_3_0_clk/A (CLKBUF_X3)\n     1   27.74    0.02    0.06    0.49 ^ clkbuf_2_3_0_clk/Z (CLKBUF_X3)\n                                         clknet_2_3_0_clk (net)\n                  0.02    0.01    0.50 ^ clkbuf_2_3_1_clk/A (CLKBUF_X3)\n     1   28.79    0.02    0.05    0.55 ^ clkbuf_2_3_1_clk/Z (CLKBUF_X3)\n                                         clknet_2_3_1_clk (net)\n                  0.02    0.01    0.56 ^ clkbuf_2_3_2_clk/A (CLKBUF_X3)\n     2   43.25    0.03    0.07    0.62 ^ clkbuf_2_3_2_clk/Z (CLKBUF_X3)\n                                         clknet_2_3_2_clk (net)\n                  0.03    0.00    0.63 ^ clkbuf_3_6_0_clk/A (CLKBUF_X3)\n     2   42.06    0.03    0.07    0.70 ^ clkbuf_3_6_0_clk/Z (CLKBUF_X3)\n                                         clknet_3_6_0_clk (net)\n                  0.03    0.01    0.70 ^ clkbuf_4_13_0_clk/A (CLKBUF_X3)\n     2   33.99    0.03    0.06    0.76 ^ clkbuf_4_13_0_clk/Z (CLKBUF_X3)\n                                         clknet_4_13_0_clk (net)\n                  0.03    0.01    0.77 ^ clkbuf_5_27_0_clk/A (CLKBUF_X3)\n     2   33.08    0.03    0.06    0.83 ^ clkbuf_5_27_0_clk/Z (CLKBUF_X3)\n                                         clknet_5_27_0_clk (net)\n                  0.03    0.01    0.84 ^ clkbuf_6_55_0_clk/A (CLKBUF_X3)\n     4   41.41    0.03    0.07    0.90 ^ clkbuf_6_55_0_clk/Z (CLKBUF_X3)\n                                         clknet_6_55_0_clk (net)\n                  0.03    0.01    0.91 ^ clkbuf_8_222_0_clk/A (CLKBUF_X3)\n     8   43.97    0.03    0.07    0.98 ^ clkbuf_8_222_0_clk/Z (CLKBUF_X3)\n                                         clknet_8_222_0_clk (net)\n                  0.03    0.00    0.98 ^ clkbuf_11_1778__f_clk/A (CLKBUF_X3)\n     3   56.74    0.04    0.08    1.06 ^ clkbuf_11_1778__f_clk/Z (CLKBUF_X3)\n                                         clknet_11_1778__leaf_clk (net)\n                  0.04    0.00    1.06 ^ clkbuf_leaf_5746_clk/A (CLKBUF_X3)\n     4    5.71    0.01    0.04    1.11 ^ clkbuf_leaf_5746_clk/Z (CLKBUF_X3)\n                                         clknet_leaf_5746_clk (net)\n                  0.01    0.00    1.11 ^ u_perf.perf[1388]$_DFF_PN0_/CK (DFFR_X1)\n                          0.00    1.11   clock reconvergence pessimism\n                          0.44    1.55   library removal time\n                                  1.55   data required time\n-----------------------------------------------------------------------------\n                                  1.55   data required time\n                                 -1.53   data arrival time\n-----------------------------------------------------------------------------\n                                 -0.02   slack (VIOLATED)"
+    },
+    {
+      "startpoint": "pc_start[3] (input port clocked by clk)",
+      "endpoint": "u_cp.pc[3]$_DFFE_PN0P_",
+      "check_kind": "hold",
+      "register_to_register": false,
+      "slack_ns": -0.36,
+      "report": "Startpoint: pc_start[3] (input port clocked by clk)\nEndpoint: u_cp.pc[3]$_DFFE_PN0P_\n          (rising edge-triggered flip-flop clocked by clk)\nPath Group: clk\nPath Type: min\n\nFanout     Cap    Slew   Delay    Time   Description\n-----------------------------------------------------------------------------\n                          0.00    0.00   clock clk (rise edge)\n                          0.00    0.00   clock network delay (propagated)\n                          0.60    0.60 ^ input external delay\n     1    2.07    0.00    0.00    0.60 ^ pc_start[3] (in)\n                                         pc_start[3] (net)\n                  0.00    0.00    0.60 ^ hold638813/A (CLKBUF_X1)\n     1    1.64    0.01    0.03    0.63 ^ hold638813/Z (CLKBUF_X1)\n                                         net638546 (net)\n                  0.01    0.00    0.63 ^ input2589/A (BUF_X1)\n     1    1.39    0.01    0.02    0.65 ^ input2589/Z (BUF_X1)\n                                         net2588 (net)\n                  0.01    0.00    0.65 ^ hold638814/A (CLKBUF_X1)\n     1    1.60    0.01    0.03    0.67 ^ hold638814/Z (CLKBUF_X1)\n                                         net638547 (net)\n                  0.01    0.00    0.67 ^ _1402501_/B (MUX2_X1)\n     1    1.20    0.01    0.03    0.71 ^ _1402501_/Z (MUX2_X1)\n                                         _0009440_ (net)\n                  0.01    0.00    0.71 ^ hold638815/A (CLKBUF_X1)\n     1    1.30    0.01    0.03    0.73 ^ hold638815/Z (CLKBUF_X1)\n                                         net638548 (net)\n                  0.01    0.00    0.73 ^ u_cp.pc[3]$_DFFE_PN0P_/D (DFFR_X1)\n                                  0.73   data arrival time\n\n                          0.00    0.00   clock clk (rise edge)\n                          0.00    0.00   clock source latency\n     1   43.07    0.00    0.00    0.00 ^ clk (in)\n                                         clk (net)\n                  0.01    0.01    0.01 ^ wire638656/A (BUF_X8)\n     1   45.53    0.01    0.03    0.03 ^ wire638656/Z (BUF_X8)\n                                         net638388 (net)\n                  0.02    0.01    0.05 ^ wire638655/A (BUF_X16)\n     1   88.89    0.01    0.03    0.07 ^ wire638655/Z (BUF_X16)\n                                         net638387 (net)\n                  0.05    0.04    0.11 ^ wire638654/A (BUF_X32)\n     1   90.83    0.01    0.03    0.14 ^ wire638654/Z (BUF_X32)\n                                         net638386 (net)\n                  0.05    0.04    0.18 ^ wire638653/A (BUF_X32)\n     1   65.17    0.01    0.03    0.21 ^ wire638653/Z (BUF_X32)\n                                         net638385 (net)\n                  0.03    0.02    0.23 ^ clkbuf_0_clk/A (CLKBUF_X3)\n     2   44.33    0.03    0.07    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n                                         clknet_0_clk (net)\n                  0.04    0.00    0.30 ^ clkbuf_1_0_0_clk/A (CLKBUF_X3)\n     1   29.03    0.02    0.06    0.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_0_clk (net)\n                  0.02    0.01    0.37 ^ clkbuf_1_0_1_clk/A (CLKBUF_X3)\n     2   35.18    0.03    0.06    0.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n                                         clknet_1_0_1_clk (net)\n                  0.03    0.01    0.43 ^ clkbuf_2_1_0_clk/A (CLKBUF_X3)\n     1   27.71    0.02    0.06    0.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_0_clk (net)\n                  0.02    0.01    0.49 ^ clkbuf_2_1_1_clk/A (CLKBUF_X3)\n     1   30.38    0.02    0.06    0.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_1_clk (net)\n                  0.03    0.01    0.56 ^ clkbuf_2_1_2_clk/A (CLKBUF_X3)\n     2   45.45    0.04    0.07    0.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n                                         clknet_2_1_2_clk (net)\n                  0.04    0.01    0.63 ^ clkbuf_3_2_0_clk/A (CLKBUF_X3)\n     2   42.03    0.03    0.07    0.70 ^ clkbuf_3_2_0_clk/Z (CLKBUF_X3)\n                                         clknet_3_2_0_clk (net)\n                  0.03    0.01    0.71 ^ clkbuf_4_5_0_clk/A (CLKBUF_X3)\n     2   35.12    0.03    0.06    0.77 ^ clkbuf_4_5_0_clk/Z (CLKBUF_X3)\n                                         clknet_4_5_0_clk (net)\n                  0.03    0.01    0.77 ^ clkbuf_5_10_0_clk/A (CLKBUF_X3)\n     2   39.14    0.03    0.06    0.84 ^ clkbuf_5_10_0_clk/Z (CLKBUF_X3)\n                                         clknet_5_10_0_clk (net)\n                  0.03    0.01    0.84 ^ clkbuf_6_21_0_clk/A (CLKBUF_X3)\n     4   48.67    0.04    0.07    0.92 ^ clkbuf_6_21_0_clk/Z (CLKBUF_X3)\n                                         clknet_6_21_0_clk (net)\n                  0.04    0.00    0.92 ^ clkbuf_8_87_0_clk/A (CLKBUF_X3)\n     8   41.28    0.03    0.07    0.99 ^ clkbuf_8_87_0_clk/Z (CLKBUF_X3)\n                                         clknet_8_87_0_clk (net)\n                  0.03    0.00    1.00 ^ clkbuf_11_698__f_clk/A (CLKBUF_X3)\n     6   16.26    0.02    0.05    1.05 ^ clkbuf_11_698__f_clk/Z (CLKBUF_X3)\n                                         clknet_11_698__leaf_clk (net)\n                  0.02    0.00    1.05 ^ clkbuf_leaf_7991_clk/A (CLKBUF_X3)\n     5   11.46    0.01    0.04    1.09 ^ clkbuf_leaf_7991_clk/Z (CLKBUF_X3)\n                                         clknet_leaf_7991_clk (net)\n                  0.01    0.00    1.09 ^ u_cp.pc[3]$_DFFE_PN0P_/CK (DFFR_X1)\n                          0.00    1.09   clock reconvergence pessimism\n                          0.01    1.10   library hold time\n                                  1.10   data required time\n-----------------------------------------------------------------------------\n                                  1.10   data required time\n                                 -0.73   data arrival time\n-----------------------------------------------------------------------------\n                                 -0.36   slack (VIOLATED)"
+    },
+    {
+      "startpoint": "u_gemm.d3_addr[23]$_DFFE_PP_",
+      "endpoint": "u_gemm.d4_addr[23]$_DFFE_PP_",
+      "check_kind": "hold",
+      "register_to_register": true,
+      "slack_ns": 0.08,
+      "report": "Startpoint: u_gemm.d3_addr[23]$_DFFE_PP_\n            (rising edge-triggered flip-flop clocked by clk)\nEndpoint: u_gemm.d4_addr[23]$_DFFE_PP_\n          (rising edge-triggered flip-flop clocked by clk)\nPath Group: clk\nPath Type: min\n\n  Delay    Time   Description\n---------------------------------------------------------\n   0.00    0.00   clock clk (rise edge)\n   0.00    0.00   clock source latency\n   0.00    0.00 ^ clk (in)\n   0.03    0.03 ^ wire638656/Z (BUF_X8)\n   0.04    0.07 ^ wire638655/Z (BUF_X16)\n   0.07    0.14 ^ wire638654/Z (BUF_X32)\n   0.07    0.21 ^ wire638653/Z (BUF_X32)\n   0.09    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n   0.06    0.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n   0.07    0.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n   0.06    0.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n   0.06    0.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n   0.08    0.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n   0.07    0.70 ^ clkbuf_3_2_0_clk/Z (CLKBUF_X3)\n   0.06    0.76 ^ clkbuf_4_4_0_clk/Z (CLKBUF_X3)\n   0.06    0.82 ^ clkbuf_5_8_0_clk/Z (CLKBUF_X3)\n   0.07    0.89 ^ clkbuf_6_16_0_clk/Z (CLKBUF_X3)\n   0.07    0.95 ^ clkbuf_8_66_0_clk/Z (CLKBUF_X3)\n   0.05    1.00 ^ clkbuf_11_535__f_clk/Z (CLKBUF_X3)\n   0.04    1.04 ^ clkbuf_leaf_9433_clk/Z (CLKBUF_X3)\n   0.00    1.04 ^ u_gemm.d3_addr[23]$_DFFE_PP_/CK (DFF_X1)\n   0.09    1.13 ^ u_gemm.d3_addr[23]$_DFFE_PP_/Q (DFF_X1)\n   0.04    1.17 ^ _2456665_/Z (MUX2_X1)\n   0.00    1.17 ^ u_gemm.d4_addr[23]$_DFFE_PP_/D (DFF_X1)\n           1.17   data arrival time\n\n   0.00    0.00   clock clk (rise edge)\n   0.00    0.00   clock source latency\n   0.00    0.00 ^ clk (in)\n   0.03    0.03 ^ wire638656/Z (BUF_X8)\n   0.04    0.07 ^ wire638655/Z (BUF_X16)\n   0.07    0.14 ^ wire638654/Z (BUF_X32)\n   0.07    0.21 ^ wire638653/Z (BUF_X32)\n   0.09    0.30 ^ clkbuf_0_clk/Z (CLKBUF_X3)\n   0.06    0.36 ^ clkbuf_1_0_0_clk/Z (CLKBUF_X3)\n   0.07    0.43 ^ clkbuf_1_0_1_clk/Z (CLKBUF_X3)\n   0.06    0.49 ^ clkbuf_2_1_0_clk/Z (CLKBUF_X3)\n   0.06    0.55 ^ clkbuf_2_1_1_clk/Z (CLKBUF_X3)\n   0.08    0.62 ^ clkbuf_2_1_2_clk/Z (CLKBUF_X3)\n   0.07    0.70 ^ clkbuf_3_2_0_clk/Z (CLKBUF_X3)\n   0.06    0.76 ^ clkbuf_4_4_0_clk/Z (CLKBUF_X3)\n   0.06    0.82 ^ clkbuf_5_9_0_clk/Z (CLKBUF_X3)\n   0.08    0.90 ^ clkbuf_6_18_0_clk/Z (CLKBUF_X3)\n   0.07    0.97 ^ clkbuf_8_73_0_clk/Z (CLKBUF_X3)\n   0.07    1.03 ^ clkbuf_11_586__f_clk/Z (CLKBUF_X3)\n   0.05    1.08 ^ clkbuf_leaf_9432_clk/Z (CLKBUF_X3)\n   0.00    1.08 ^ u_gemm.d4_addr[23]$_DFFE_PP_/CK (DFF_X1)\n   0.00    1.08   clock reconvergence pessimism\n   0.01    1.09   library hold time\n           1.09   data required time\n---------------------------------------------------------\n           1.09   data required time\n          -1.17   data arrival time\n---------------------------------------------------------\n           0.08   slack (MET)"
+    }
+  ],
+  "worst_register_hold_slack_ns": 0.08,
+  "internal_memory_accounting": {
+    "source": "build/orfs/final-dram-kv-native-no-fa-single-pass/results/nangate45/llaccel_core_v1/base/mem.json",
+    "boundary": "core internal inferred memories before mapping",
+    "mutable_bits": 62620,
+    "rom_bits": 200928,
+    "note": "ROM bits become logic; mutable memories become registers in this flow. These bit counts are not physical macro area.",
+    "memories": [
+      {
+        "module": "llaccel_core",
+        "name": "_19005_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19006_",
+        "width_bits": 14,
+        "depth": 16,
+        "bits": 224,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19007_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19008_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19009_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19010_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19011_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19012_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19013_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19014_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19015_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19016_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19017_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19018_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19019_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19020_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19021_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19022_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19023_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19024_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19025_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19026_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19027_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19028_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19029_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19030_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19031_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19032_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19033_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19034_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19035_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19036_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19037_",
+        "width_bits": 16,
+        "depth": 512,
+        "bits": 8192,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "_19038_",
+        "width_bits": 16,
+        "depth": 256,
+        "bits": 4096,
+        "readonly": true
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_arb.u_tags.mem",
+        "width_bits": 2,
+        "depth": 64,
+        "bits": 128,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_attn.sbuf",
+        "width_bits": 32,
+        "depth": 256,
+        "bits": 8192,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_attn.u_dram_tags.mem",
+        "width_bits": 14,
+        "depth": 32,
+        "bits": 448,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_attn.u_wq.mem_addr",
+        "width_bits": 32,
+        "depth": 2,
+        "bits": 64,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_attn.u_wq.mem_data",
+        "width_bits": 512,
+        "depth": 2,
+        "bits": 1024,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_cp.g_q[0].u_q.mem",
+        "width_bits": 512,
+        "depth": 8,
+        "bits": 4096,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_cp.g_q[1].u_q.mem",
+        "width_bits": 512,
+        "depth": 8,
+        "bits": 4096,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_cp.g_q[2].u_q.mem",
+        "width_bits": 512,
+        "depth": 8,
+        "bits": 4096,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_cp.g_q[3].u_q.mem",
+        "width_bits": 512,
+        "depth": 8,
+        "bits": 4096,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_cp.u_pf.mem",
+        "width_bits": 512,
+        "depth": 4,
+        "bits": 2048,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_dma.u_ldata.mem",
+        "width_bits": 512,
+        "depth": 32,
+        "bits": 16384,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_dma.u_lmeta.mem",
+        "width_bits": 26,
+        "depth": 32,
+        "bits": 832,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_dma.u_rdata.mem",
+        "width_bits": 512,
+        "depth": 4,
+        "bits": 2048,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_dma.u_rmeta.mem",
+        "width_bits": 43,
+        "depth": 4,
+        "bits": 172,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_gemm.acc",
+        "width_bits": 512,
+        "depth": 16,
+        "bits": 8192,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_gemm.u_out.mem",
+        "width_bits": 280,
+        "depth": 2,
+        "bits": 560,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_gemm.wbuf",
+        "width_bits": 2048,
+        "depth": 2,
+        "bits": 4096,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_vec.u_f0.mem",
+        "width_bits": 256,
+        "depth": 4,
+        "bits": 1024,
+        "readonly": false
+      },
+      {
+        "module": "llaccel_core",
+        "name": "u_vec.u_f1.mem",
+        "width_bits": 256,
+        "depth": 4,
+        "bits": 1024,
+        "readonly": false
+      }
+    ]
+  },
+  "external_sram_contract": {
+    "bytes": 1048576,
+    "banks": 16,
+    "bank_word_bits": 128,
+    "words_per_bank": 4096,
+    "ports_per_bank": 1,
+    "port_type": "single shared read/write port",
+    "write_enable_granularity_bytes": 1,
+    "behavioral_read_latency_cycles": 1,
+    "contract_sources": [
+      "rtl/sram_bank.sv",
+      "rtl/llaccel_core.sv"
+    ],
+    "physical_macro_implementation": null,
+    "note": "Architectural storage interface only; external SRAM area, timing, leakage and dynamic power are unmeasured."
+  },
+  "optimization_profile": {
+    "repair_max_iterations": 500,
+    "post_route_incremental_repair": false,
+    "num_cores": 8,
+    "num_cores_scope": "Current invocation; reused checkpoints retain creation settings recorded in stage logs",
+    "vectorless_power": false,
+    "repair_limit_scope": "OpenROAD max_iterations limits setup repair; hold repair retains tool-native limits",
+    "lec_check": false,
+    "formal_equivalence": "Not established; optional Kepler child failed with illegal instruction",
+    "hook_sha256": "f8554e26e932601b884d2d24c91f6331bf21bc9d0d94ea3df46d2de5448e94d9",
+    "description": "Bounded diagnostic timing repair; original SDC unchanged; not timing closure",
+    "metrics_original_sha256": "b314571634205e7f739126bc9e6923f7f65ea510307ed2b92ee4e4a7d890f329",
+    "metrics_profile_sha256": "f34a7a976843deb0db92159544450ddb75f5e6026b8d315bf18281fe785a11fb",
+    "resumed_route_checkpoint": {
+      "key": "4e5556fcf990caced98178bae902e017cf52475248882590407e7c913f76f385",
+      "manifest_sha256": "35cb95fd1109e05e6a20fa080729f354dafb30f5fba152669a9acd98a4d95827",
+      "script_sha256": "1247e1f4ce133123411217a73668d4b4f5cc7465d8d1869ac9684badf931825b"
+    }
+  },
+  "sram_estimate": null
+}

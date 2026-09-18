@@ -1,0 +1,8 @@
+The history of science includes many careful experiments and unexpected discoveries. Researchers compare their measurements with predictions and explain the differences.
+A computer program reads input, transforms data, and writes a result. Clear interfaces and systematic tests help make its behavior reliable.
+Yesterday we walked through the park and watched birds near the river. The weather was cool and the trees were moving in the wind.
+To solve the problem, first identify the known quantities. Then consider the assumptions and check whether the proposed answer satisfies each condition.
+A library contains stories, technical books, and historical records. Readers can explore unfamiliar subjects or return to favorite authors.
+The recipe calls for vegetables, rice, water, and a little salt. Prepare the ingredients before heating the pan and stir while cooking.
+Energy can move between systems through heat and work. A useful physical model states its boundary conditions and accounts for conserved quantities.
+Please explain how to write a short Python function that adds two numbers and returns their sum. Include a simple example with positive integers.

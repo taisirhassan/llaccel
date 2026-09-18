@@ -1,0 +1,72 @@
+verilator --cc --exe --build -j 2 --assert -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL -I/Users/taisirhassan/Documents/Coding/llaccel/rtl -CFLAGS "-std=c++20 -O2 -I/Users/taisirhassan/Documents/Coding/llaccel/include -I/Users/taisirhassan/Documents/Coding/llaccel/tb/common" --top-module tb_attn_top --Mdir /Users/taisirhassan/Documents/Coding/llaccel/build/tb/attn/attn /Users/taisirhassan/Documents/Coding/llaccel/rtl/llaccel_pkg.sv /Users/taisirhassan/Documents/Coding/llaccel/rtl/llaccel_luts_pkg.sv /Users/taisirhassan/Documents/Coding/llaccel/rtl/sync_fifo.sv /Users/taisirhassan/Documents/Coding/llaccel/rtl/udiv.sv /Users/taisirhassan/Documents/Coding/llaccel/rtl/attn_engine.sv /Users/taisirhassan/Documents/Coding/llaccel/tb/common/sram_stub.sv tb_attn_top.sv tb_attn.cpp
+c++  -I.  -MMD -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include -I/opt/homebrew/Cellar/verilator/5.052/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fbracket-depth=4096 -fcf-protection=none -Xclang -fno-pch-timestamp -Qunused-arguments -Wno-bool-operation -Wno-c++11-narrowing -Wno-constant-logical-operand -Wno-int-in-bool-context -Wno-non-pod-varargs -Wno-parentheses-equality -Wno-shadow -Wno-sign-compare -Wno-tautological-bitwise-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unnecessary-virtual-specifier -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-vla-cxx-extension    -std=c++20 -O2 -I/Users/taisirhassan/Documents/Coding/llaccel/include -I/Users/taisirhassan/Documents/Coding/llaccel/tb/common   -Os  -c -o tb_attn.o ../../../../tb/attn/tb_attn.cpp
+c++  -Wl,-U,__Z15vl_time_stamp64v,-U,__Z13sc_time_stampv,-U,_vlog_startup_routines   tb_attn.o verilated.o verilated_dpi.o verilated_threads.o Vtb_attn_top__ALL.a    -pthread -lpthread   -o Vtb_attn_top
+- V e r i l a t i o n   R e p o r t: Verilator 5.052 2026-09-05 rev vUNKNOWN-built20260905
+- Verilator: Built from 0.000 MB sources in 0 modules, into 0.000 MB in 0 C++ files needing 0.000 MB
+- Verilator: Walltime 5.336 s (elab=0.000, cvt=0.000, bld=5.331); cpu 0.003 s on 2 threads; allocated 3.281 MB
+/Users/taisirhassan/Documents/Coding/llaccel/build/tb/attn/attn/Vtb_attn_top +seed=1
+ATTN      deny= 0%: 100 cases, 0 failures, 64.440 cycles/key (26707146 cycles, 414448 keys, 587 stall cycles)
+KV_WRITE  deny= 0%: 100 cases, 0 failures, 2.353 cycles/row (6125 cycles, 2603 rows, 0 stall cycles)
+ATTN      deny=30%: 100 cases, 0 failures, 44.839 cycles/key (13851265 cycles, 308911 keys, 2627 stall cycles)
+KV_WRITE  deny=30%: 100 cases, 0 failures, 3.034 cycles/row (8779 cycles, 2894 rows, 1486 stall cycles)
+ATTN directed equal-scores D=16 deny= 0%: ok (18109 cycles)
+ATTN directed huge-gap     D=16 deny= 0%: ok (33478 cycles)
+ATTN directed single-key   D=16 deny= 0%: ok (117 cycles)
+ATTN directed T256-GQA3    D=16 deny= 0%: ok (17024 cycles)
+ATTN directed equal-scores D=32 deny= 0%: ok (248988 cycles)
+ATTN directed huge-gap     D=32 deny= 0%: ok (4957 cycles)
+ATTN directed single-key   D=32 deny= 0%: ok (132 cycles)
+ATTN directed T256-GQA3    D=32 deny= 0%: ok (17036 cycles)
+ATTN directed equal-scores D=64 deny= 0%: ok (57314 cycles)
+ATTN directed huge-gap     D=64 deny= 0%: ok (27725 cycles)
+ATTN directed single-key   D=64 deny= 0%: ok (282 cycles)
+ATTN directed T256-GQA3    D=64 deny= 0%: ok (55658 cycles)
+ATTN directed equal-scores D=16 deny=30%: ok (29933 cycles)
+ATTN directed huge-gap     D=16 deny=30%: ok (26333 cycles)
+ATTN directed single-key   D=16 deny=30%: ok (117 cycles)
+ATTN directed T256-GQA3    D=16 deny=30%: ok (17029 cycles)
+ATTN directed equal-scores D=32 deny=30%: ok (85594 cycles)
+ATTN directed huge-gap     D=32 deny=30%: ok (7643 cycles)
+ATTN directed single-key   D=32 deny=30%: ok (134 cycles)
+ATTN directed T256-GQA3    D=32 deny=30%: ok (20256 cycles)
+ATTN directed equal-scores D=64 deny=30%: ok (37216 cycles)
+ATTN directed huge-gap     D=64 deny=30%: ok (1030 cycles)
+ATTN directed single-key   D=64 deny=30%: ok (123 cycles)
+ATTN directed T256-GQA3    D=64 deny=30%: ok (50834 cycles)
+ATTN DRAM tiled T=255 deny=0: ok (2937 cycles)
+ATTN DRAM tiled T=255 deny=30: ok (2938 cycles)
+ATTN DRAM tiled T=256 deny=0: ok (2839 cycles)
+ATTN DRAM tiled T=256 deny=30: ok (2840 cycles)
+ATTN DRAM tiled T=257 deny=0: ok (69475 cycles)
+ATTN DRAM tiled T=257 deny=30: ok (69475 cycles)
+ATTN DRAM tiled T=511 deny=0: ok (3287 cycles)
+ATTN DRAM tiled T=511 deny=30: ok (3287 cycles)
+ATTN DRAM tiled T=512 deny=0: ok (3301 cycles)
+ATTN DRAM tiled T=512 deny=30: ok (3301 cycles)
+ATTN DRAM tiled T=513 deny=0: ok (42173 cycles)
+ATTN DRAM tiled T=513 deny=30: ok (42174 cycles)
+ATTN DRAM tiled T=1023 deny=0: ok (6651 cycles)
+ATTN DRAM tiled T=1023 deny=30: ok (6651 cycles)
+ATTN DRAM tiled T=1024 deny=0: ok (6673 cycles)
+ATTN DRAM tiled T=1024 deny=30: ok (6674 cycles)
+ATTN DRAM tiled T=4095 deny=0: ok (47619 cycles)
+ATTN DRAM tiled T=4095 deny=30: ok (47619 cycles)
+ATTN DRAM tiled T=4096 deny=0: ok (45833 cycles)
+ATTN DRAM tiled T=4096 deny=30: ok (45834 cycles)
+ATTN DRAM multirow T=257 D=16: ok
+ATTN DRAM multirow T=513 D=16: ok
+ATTN DRAM multirow T=1024 D=16: ok
+ATTN DRAM multirow T=4096 D=16: ok
+ATTN DRAM multirow T=257 D=32: ok
+ATTN DRAM multirow T=513 D=32: ok
+ATTN DRAM multirow T=1024 D=32: ok
+ATTN DRAM multirow T=4096 D=32: ok
+ATTN DRAM multirow T=257 D=64: ok
+ATTN DRAM multirow T=513 D=64: ok
+ATTN DRAM multirow T=1024 D=64: ok
+ATTN DRAM multirow T=4096 D=64: ok
+ATTN DRAM max-row/context T=4096 M=16 D=16 deny=30: ok (1002806 cycles)
+ATTN DRAM max-row/context T=4096 M=16 D=32 deny=30: ok (1002846 cycles)
+ATTN DRAM max-row/context T=4096 M=16 D=64 deny=30: ok (1002923 cycles)
+ATTN directed M=1 H=1 D=32 T=64 deny=0: 1160 cycles accept->done, 256 mac cycles, 0 stall cycles (ok)
+tb_attn: 714 cases, 0 failures -> PASS

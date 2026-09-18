@@ -57,7 +57,8 @@ module dma_engine
 
   // ---- instruction registers ----------------------------------------------------
   logic        is_store;
-  logic [31:0] row_bytes, dram_stride, sram_stride;
+  logic [31:0] row_bytes, dram_stride;
+  logic [23:0] sram_stride;
   logic [7:0]  sig;
 
   // ---- beat sequencer -----------------------------------------------------------------
@@ -68,7 +69,8 @@ module dma_engine
   logic        row_first;          // b is the first beat of the row
   logic        rd_phase;           // store: which SRAM read of the beat is being issued
 
-  logic [31:0] rem, rem_m1;
+  logic [31:0] rem;
+  logic [1:0]  rem_m1_c;           // chunk index of the row's last byte within its beat: ((rem - 1) mod 64) / 16
   logic        row_last, last_beat;
   logic [1:0]  first_c, last_c, p0;
   logic [2:0]  n_c;
@@ -77,10 +79,10 @@ module dma_engine
 
   always_comb begin
     rem       = de - b;
-    rem_m1    = rem - 32'd1;
+    rem_m1_c  = 2'((rem[5:0] - 6'd1) >> 4);
     row_last  = (rem <= 32'd64);
     first_c   = row_first ? ds[5:4] : 2'd0;
-    last_c    = row_last ? rem_m1[5:4] : 2'd3;
+    last_c    = row_last ? rem_m1_c : 2'd3;
     n_c       = {1'b0, last_c} - {1'b0, first_c} + 3'd1;
     p0        = scur[5:4];
     two       = ({1'b0, p0} + n_c) > 3'd4;
@@ -88,7 +90,7 @@ module dma_engine
   end
 
   // ---- LOAD: DRAM reads -> FIFOs -> SRAM writes ------------------------------------------
-  localparam int unsigned LMETA_W = 1 + 2 + 3 + 24;   // last, first_c, n_c, scur
+  localparam int unsigned LMETA_W = 1 + 2 + 3 + 20;   // last, first_c, n_c, scur[23:4]
   logic               lmeta_push, lmeta_pop, lmeta_full, lmeta_empty;
   logic [LMETA_W-1:0] lmeta_in, lmeta_out;
   logic [$clog2(MAX_OUTSTANDING+1)-1:0] lmeta_count, ldata_count;
@@ -101,8 +103,9 @@ module dma_engine
   logic               h_two;
   logic               wr_phase;
 
-  assign lmeta_in = {last_beat, first_c, n_c, scur};
-  assign {h_last, h_first, h_nc, h_scur} = lmeta_out;
+  assign lmeta_in = {last_beat, first_c, n_c, scur[23:4]};
+  assign {h_last, h_first, h_nc, h_scur[23:4]} = lmeta_out;
+  assign h_scur[3:0] = 4'd0;
   assign h_p0  = h_scur[5:4];
   assign h_two = ({1'b0, h_p0} + h_nc) > 3'd4;
 
@@ -203,7 +206,7 @@ module dma_engine
   assign done_pulse   = (state == S_DONE);
   assign done_sig_sem = sig;
 
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state       <= S_IDLE;
       is_store    <= 1'b0;
@@ -229,7 +232,7 @@ module dma_engine
             sig         <= instr_sig_sem(instr);
             row_bytes   <= instr[5];
             dram_stride <= (instr[0][7:0] == OP_DMA_STORE) ? instr[7] : instr[6];
-            sram_stride <= (instr[0][7:0] == OP_DMA_STORE) ? instr[6] : instr[7];
+            sram_stride <= (instr[0][7:0] == OP_DMA_STORE) ? instr[6][23:0] : instr[7][23:0];
             ds          <= instr[3];
             de          <= instr[3] + instr[5];
             b           <= {instr[3][31:6], 6'd0};
@@ -249,19 +252,21 @@ module dma_engine
           // sequencer
           if (seq_adv) begin
             b         <= b + 32'd64;
-            scur      <= scur + {18'd0, n_c, 4'd0};
+            scur      <= scur + {17'd0, n_c, 4'd0};
             row_first <= 1'b0;
             rd_phase  <= 1'b0;
             if (row_last) begin
               if (rows_left == 32'd1) begin
                 seq_active <= 1'b0;
               end else begin
+                logic [31:0] ds_next;
+                ds_next   = ds + dram_stride;
                 rows_left <= rows_left - 32'd1;
-                ds        <= ds + dram_stride;
-                de        <= ds + dram_stride + row_bytes;
-                b         <= {(ds + dram_stride) >> 6, 6'd0};
-                srow      <= srow + sram_stride[23:0];
-                scur      <= srow + sram_stride[23:0];
+                ds        <= ds_next;
+                de        <= ds_next + row_bytes;
+                b         <= {ds_next[31:6], 6'd0};
+                srow      <= srow + sram_stride;
+                scur      <= srow + sram_stride;
                 row_first <= 1'b1;
               end
             end
@@ -319,5 +324,6 @@ module dma_engine
 
   logic unused_ok;
   assign unused_ok = &{1'b0, lmeta_count, ldata_count, ldata_full, rmeta_count, rdata_count, rdata_full,
-                       rmeta_empty, instr[1], instr[15:8], instr[0][23:8], instr[2][31:24]};
+                       rmeta_empty, instr[1], instr[15:8], instr[0][23:8], instr[2][31:24], instr[6][31:24],
+                       instr[7][31:24], h_scur[3:0]};
 endmodule

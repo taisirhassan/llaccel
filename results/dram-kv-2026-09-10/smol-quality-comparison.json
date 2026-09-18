@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "comparison": "Identical untouched TEST token IDs/window starts; selected using VALIDATION only",
+  "original": {
+    "scored_tokens": 4096,
+    "top1_agreement": 0.65673828125,
+    "mean_cosine": 0.936703377668807,
+    "integer_cross_entropy_nats": 4.807319597028038,
+    "integer_perplexity": 122.403087817605,
+    "fp32_cross_entropy_nats": 4.462610181884489,
+    "fp32_perplexity": 86.71355210415248,
+    "cross_entropy_delta_nats": 0.3447094151435488
+  },
+  "selected": {
+    "scored_tokens": 4096,
+    "top1_agreement": 0.795654296875,
+    "mean_cosine": 0.9793755098567432,
+    "integer_cross_entropy_nats": 4.573862190698164,
+    "integer_perplexity": 96.91770251438574,
+    "fp32_cross_entropy_nats": 4.462610181884489,
+    "fp32_perplexity": 86.71355210415248,
+    "cross_entropy_delta_nats": 0.11125200881367459
+  },
+  "excess_ce_reduction_fraction": 0.6772585722169919
+}

@@ -14,12 +14,20 @@ dev = [
 ]
 
 [project.scripts]
+llaccel-hf = "llaccel.hf:main"
 llaccel-export = "llaccel.export:main"
 llaccel-train = "llaccel.train:main"
 llaccel-golden = "llaccel.golden:main"
 llaccel-verify = "llaccel.verify:main"
 llaccel-calibrate = "llaccel.calibrate:main"
 llaccel-refquant = "llaccel.refquant:main"
+
+[project.optional-dependencies]
+hf = [
+    "huggingface-hub>=1.0",
+    "tokenizers>=0.22",
+    "transformers==5.9.0",
+]
 
 [build-system]
 requires = ["hatchling"]

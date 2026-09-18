@@ -1,0 +1,23 @@
+Test project /Users/taisirhassan/Documents/Coding/llaccel/build/llama-qwen-software
+    Start 1: numerics_selftest
+1/9 Test #1: numerics_selftest .......................   Passed    0.01 sec
+    Start 2: runtime_selftest
+2/9 Test #2: runtime_selftest ........................   Passed    0.01 sec
+    Start 3: llbin_selftest
+3/9 Test #3: llbin_selftest ..........................   Passed    0.01 sec
+    Start 4: dram_kv_selftest
+4/9 Test #4: dram_kv_selftest ........................   Passed    0.05 sec
+    Start 5: llaccel-compiler-regressions
+5/9 Test #5: llaccel-compiler-regressions ............   Passed    0.92 sec
+    Start 6: llaccel-compiler-streaming
+6/9 Test #6: llaccel-compiler-streaming ..............   Passed    0.53 sec
+    Start 7: llaccel-compiler-streaming-functional
+7/9 Test #7: llaccel-compiler-streaming-functional ...   Passed    2.18 sec
+    Start 8: llaccel-compiler-dram-kv
+8/9 Test #8: llaccel-compiler-dram-kv ................   Passed    0.23 sec
+    Start 9: llaccel-compiler-hf-geometry
+9/9 Test #9: llaccel-compiler-hf-geometry ............   Passed    0.28 sec
+
+100% tests passed out of 9
+
+Total Test time (real) =   4.22 sec

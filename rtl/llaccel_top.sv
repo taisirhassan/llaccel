@@ -3,7 +3,8 @@
 module llaccel_top
   import llaccel_pkg::*;
 #(
-  parameter bit EPILOGUE_FUSION = 1'b0
+  parameter bit EPILOGUE_FUSION = 1'b0,
+  parameter int unsigned DMA_MAX_OUTSTANDING = 16
 ) (
   input  logic               clk,
   input  logic               rst_n,
@@ -27,7 +28,7 @@ module llaccel_top
   logic [BANK_DW-1:0]    bank_wdata [NBANKS];
   logic [BANK_DW-1:0]    bank_rdata [NBANKS];
 
-  llaccel_core #(.EPILOGUE_FUSION(EPILOGUE_FUSION)) u_core (
+  llaccel_core #(.EPILOGUE_FUSION(EPILOGUE_FUSION), .DMA_MAX_OUTSTANDING(DMA_MAX_OUTSTANDING)) u_core (
     .clk, .rst_n, .start, .pc_start, .pos, .done,
     .dram_req_valid, .dram_req_ready, .dram_req_we, .dram_req_addr, .dram_req_wdata, .dram_req_wstrb,
     .dram_rsp_valid, .dram_rsp_rdata, .perf,

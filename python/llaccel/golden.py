@@ -7,7 +7,7 @@ exact integer semantics of docs/NUMERICS.md / include/llaccel/numerics.h.
 Every primitive below is a line-by-line twin of the C++ function of the same
 name in numerics.h. All arithmetic is int64 numpy (or Python int); there is no
 floating point on the data path. The device's execution model is mirrored too:
-prefill runs in chunks of M=16 rows (zero-padded, positions POS+m, pad rows'
+prefill runs in configurable chunks (default M=16) of rows (zero-padded, positions POS+m, pad rows'
 KV entries written and later overwritten) and decode runs M=1, so the sequence
 of ops and positions is identical to what the ISA programs perform.
 """
@@ -39,9 +39,9 @@ def rshr(v, s):
     if s.ndim == 0:
         if int(s) == 0:
             return v.copy()
-        return (v + (I64(1) << (s - I64(1)))) >> s
+        return (v >> s) + ((v >> (s - I64(1))) & I64(1))
     s_safe = np.where(s == 0, I64(1), s)
-    rounded = (v + (I64(1) << (s_safe - I64(1)))) >> s_safe
+    rounded = (v >> s_safe) + ((v >> (s_safe - I64(1))) & I64(1))
     return np.where(s == 0, v, rounded)
 
 
@@ -159,7 +159,7 @@ def rope(x, H: int, D: int, cos_tab, sin_tab, pos: int):
 
 
 # ---- Attention (one query row, one head) ---------------------------------------------------
-def attention_head(q, keys, vals, Ms: int, Ss: int, Mo: int, So: int):
+def attention_head(q, keys, vals, Ms: int, Ss: int, Mo: int, So: int, prob_bits: int = 8):
     """q [D] i8; keys/vals [T][D] i8 -> out [D] i8 (numerics.h attention_head)."""
     q = np.asarray(q, dtype=I64)
     keys = np.asarray(keys, dtype=I64)
@@ -171,8 +171,12 @@ def attention_head(q, keys, vals, Ms: int, Ss: int, Mo: int, So: int):
     p = np.where(z < 4096, (EXPI[zi >> 8] * EXPF[zi & 255] + (1 << 15)) >> 16, I64(0))
     total = int(p.sum())
     inv = udiv(1 << 31, total)
-    pn = satu8((p * I64(inv) + (I64(1) << 22)) >> 23)
+    if prob_bits not in (8, 15):
+        raise ValueError("attention prob_bits must be 8 or 15")
+    pn = np.minimum(rshr(p * I64(inv), 31 - prob_bits), (1 << prob_bits) - 1)
     o = pn @ vals  # i32 per d
+    if prob_bits == 15:
+        o = rshr(o, 7)  # preserve the ISA's existing Q0.8 output multiplier
     return sat8(mulshift(o, Mo, So))
 
 
@@ -189,17 +193,17 @@ class QGraph:
             self.g = json.load(f)
         self.model = self.g["model"]
         self.ops = self.g["ops"]
-        self.blob = (self.dir / self.g["weights_file"]).read_bytes()
+        self.blob = np.memmap(self.dir / self.g["weights_file"], dtype=np.uint8, mode="r")
         self.tensors: dict[str, np.ndarray] = {}
         self.tensor_exp: dict[str, int] = {}
         for name, spec in self.g["tensors"].items():
             dt, size = _DT[spec["dtype"]]
             count = int(np.prod(spec["shape"]))
             if spec["dtype"] == "rq":
-                arr = np.frombuffer(self.blob, dtype=dt, count=2 * count, offset=spec["offset"]).astype(I64)
+                arr = np.frombuffer(self.blob, dtype=dt, count=2 * count, offset=spec["offset"])
                 arr = arr.reshape(count, 2)
             else:
-                arr = np.frombuffer(self.blob, dtype=dt, count=count, offset=spec["offset"]).astype(I64)
+                arr = np.frombuffer(self.blob, dtype=dt, count=count, offset=spec["offset"])
                 arr = arr.reshape(spec["shape"])
             self.tensors[name] = arr
             if "exp" in spec:
@@ -210,11 +214,38 @@ class QGraph:
         self.output_name = self.g.get("output", "logits")
 
 
+def exact_blas_matmul(a: np.ndarray, w: np.ndarray, chunk_rows: int = 1024) -> np.ndarray:
+    """Compute integer A @ W.T with exact FP64 BLAS accumulation.
+
+    The signed dot-product absolute bound must fit 53 integer bits; therefore
+    every product and every possible partial sum is exactly representable.
+    Chunked weight conversion bounds temporary storage independently of vocab.
+    """
+    if a.ndim != 2 or w.ndim != 2 or a.shape[1] != w.shape[1]:
+        raise ValueError("invalid matrix dimensions")
+    if a.dtype.kind not in "iu" or w.dtype.kind not in "iu" or chunk_rows < 1:
+        raise ValueError("exact BLAS requires integer inputs and positive chunks")
+    # Actual activations are small, but use the weight dtype bound to avoid
+    # scanning the entire checkpoint on each token batch.
+    amax = max(abs(int(a.min(initial=0))), abs(int(a.max(initial=0))))
+    wi = np.iinfo(w.dtype)
+    wmax = max(abs(int(wi.min)), abs(int(wi.max)))
+    if a.shape[1] * amax * wmax > (1 << 53):
+        raise ValueError("integer dot product exceeds exact FP64 accumulation bound")
+    af = a.astype(np.float64)
+    out = np.empty((a.shape[0], w.shape[0]), dtype=I64)
+    for start in range(0, w.shape[0], chunk_rows):
+        stop = min(start + chunk_rows, w.shape[0])
+        out[:, start:stop] = (af @ w[start:stop].astype(np.float64).T).astype(I64)
+    return out
+
+
 # --------------------------------------------------------------------------------------
 # Golden model
 # --------------------------------------------------------------------------------------
 class GoldenModel:
-    def __init__(self, qgraph_dir: Path | str) -> None:
+    def __init__(self, qgraph_dir: Path | str, *, fast_matmul: bool = False) -> None:
+        self.fast_matmul = fast_matmul
         self.q = QGraph(qgraph_dir)
         m = self.q.model
         self.dim = int(m["dim"])
@@ -222,6 +253,9 @@ class GoldenModel:
         self.vocab = int(m["vocab"])
         self.vocab_padded = int(m.get("vocab_padded", self.vocab))
         self.max_seq = int(m["max_seq"])
+        self.prefill_m = int(m.get("prefill_m", PREFILL_M))
+        if not 1 <= self.prefill_m <= 16 or self.max_seq % self.prefill_m:
+            raise ValueError("max_seq must be divisible by prefill_m in [1,16]")
         self.E_RES = int(m["E_RES"])
         self.E_LOGIT = int(m["E_LOGIT"])
         self.embed = self.q.tensors["embed"]
@@ -230,12 +264,12 @@ class GoldenModel:
         self.reset()
 
     def reset(self) -> None:
-        """Clear the KV cache (device SRAM state is not reset between launches otherwise)."""
+        """Clear persistent KV state between independent sequences."""
         self.kv: dict[int, tuple[np.ndarray, np.ndarray]] = {}
         for op in self.q.ops:
             if op["op"] == "kv_write":
                 L, Hkv, D = int(op["layer"]), int(op["Hkv"]), int(op["D"])
-                self.kv[L] = (np.zeros((Hkv, self.max_seq, D), I64), np.zeros((Hkv, self.max_seq, D), I64))
+                self.kv[L] = (np.zeros((Hkv, self.max_seq, D), np.int8), np.zeros((Hkv, self.max_seq, D), np.int8))
 
     # ---- one device launch --------------------------------------------------------------
     def run_chunk(self, rows: np.ndarray, pos: int, acts: dict | None = None) -> np.ndarray:
@@ -250,7 +284,13 @@ class GoldenModel:
         for op in self.q.ops:
             k = op["op"]
             if k == "rmsnorm":
-                act[op["out"]] = rmsnorm(act[op["in"]], tens[op["gamma"]], op["eps_t"], op["C"], op["sh_post"])
+                x = act[op["in"]]
+                gamma = tens[op["gamma"]]
+                heads = int(op.get("heads", 1))
+                if heads < 1 or x.shape[1] != heads * len(gamma):
+                    raise ValueError("RMSNorm head geometry mismatch")
+                act[op["out"]] = rmsnorm(x.reshape(-1, len(gamma)), gamma,
+                    op["eps_t"], op["C"], op["sh_post"]).reshape(x.shape)
             elif k == "quant":
                 act[op["out"]] = vquant(act[op["in"]], op["M"], op["S"])
             elif k == "linear":
@@ -280,7 +320,7 @@ class GoldenModel:
         N, K = int(op["N"]), int(op["K"])
         if w.shape != (N, K) or a.shape[1] != K:
             raise ValueError(f"linear {op['out']}: shapes A{a.shape} W{w.shape} vs N={N} K={K}")
-        acc = a @ w.T  # i32: |acc| <= K * 127 * 127
+        acc = exact_blas_matmul(a, w) if self.fast_matmul else a @ w.T
         if op.get("bias"):
             acc = acc + self.q.tensors[op["bias"]][None, :]
         Mn, Sn = rq[:, 0][None, :], rq[:, 1][None, :]
@@ -322,7 +362,7 @@ class GoldenModel:
             for h in range(H):
                 kvh = h // rep
                 out[m, h * D : (h + 1) * D] = attention_head(q[m, h * D : (h + 1) * D], kc[kvh, :T], vc[kvh, :T],
-                                                             op["Ms"], op["Ss"], op["Mo"], op["So"])
+                                                             op["Ms"], op["Ss"], op["Mo"], op["So"], op.get("prob_bits", 8))
         return out
 
     # ---- host side --------------------------------------------------------------------------
@@ -337,15 +377,15 @@ class GoldenModel:
         return int(np.argmax(logits_row[:vocab]))  # lowest index wins ties
 
     def prefill(self, tokens, acts: list | None = None) -> list[np.ndarray]:
-        """Chunked prefill (M=16). Returns the logits row for every prompt token."""
+        """Chunked prefill using model.prefill_m (default 16). Returns the logits row for every prompt token."""
         tokens = [int(t) for t in tokens]
         rows_out = []
-        for start in range(0, len(tokens), PREFILL_M):
-            chunk = tokens[start : start + PREFILL_M]
+        for start in range(0, len(tokens), self.prefill_m):
+            chunk = tokens[start : start + self.prefill_m]
             a = {} if acts is not None else None
-            logits = self.run_chunk(self.embed_rows(chunk, PREFILL_M), start, a)
+            logits = self.run_chunk(self.embed_rows(chunk, self.prefill_m), start, a)
             if acts is not None:
-                acts.append({"kind": "prefill", "pos": start, "rows": PREFILL_M, "valid_rows": len(chunk), "acts": a})
+                acts.append({"kind": "prefill", "pos": start, "rows": self.prefill_m, "valid_rows": len(chunk), "acts": a})
             rows_out.extend(logits[: len(chunk)])
         return rows_out
 
@@ -358,13 +398,15 @@ class GoldenModel:
 
     def generate(self, prompt_tokens, n_tokens: int, acts: list | None = None) -> dict:
         """Greedy generation with exactly the launch sequence of the C++ runtime (runtime/src/host.cpp
-        `Host::generate`): one launch per M=16 prefill chunk, then one M=1 decode launch per generated
+        `Host::generate`): one launch per configured prefill chunk, then one M=1 decode launch per generated
         token (the last decode launch's argmax is recorded but not appended to `generated`, like the
         runtime). A decode launch is skipped when the next position would not fit in `max_seq`.
 
         Returns the golden.json record: `argmax_per_step` / `logits_last_rows` have one entry per
         launch; a logits row is the `vocab` (not `vocab_padded`) i16 logits of the launch's relevant row
         (row (L-1)%16 of the last prefill chunk, row 15 of earlier chunks, row 0 of a decode)."""
+        if not isinstance(n_tokens, int) or n_tokens < 0:
+            raise ValueError("n_tokens must be a nonnegative integer")
         prompt_tokens = [int(t) for t in prompt_tokens]
         if not prompt_tokens:
             raise ValueError("empty prompt")
@@ -374,18 +416,18 @@ class GoldenModel:
         steps, argmax_per_step, logits_rows = [], [], []
 
         def record(kind: str, pos: int, valid: int, row: np.ndarray) -> int:
-            steps.append({"kind": kind, "pos": pos, "rows": PREFILL_M if kind == "prefill" else 1, "valid_rows": valid})
+            steps.append({"kind": kind, "pos": pos, "rows": self.prefill_m if kind == "prefill" else 1, "valid_rows": valid})
             argmax_per_step.append(self.argmax(row, self.vocab))
             logits_rows.append([int(v) for v in row[: self.vocab]])
             return argmax_per_step[-1]
 
         rows = self.prefill(prompt_tokens, acts)
         L = len(prompt_tokens)
-        n_chunks = math.ceil(L / PREFILL_M)
+        n_chunks = math.ceil(L / self.prefill_m)
         nxt = -1
         for c in range(n_chunks):
-            last = min(L, (c + 1) * PREFILL_M) - 1
-            nxt = record("prefill", c * PREFILL_M, last + 1 - c * PREFILL_M, rows[last])
+            last = min(L, (c + 1) * self.prefill_m) - 1
+            nxt = record("prefill", c * self.prefill_m, last + 1 - c * self.prefill_m, rows[last])
         generated: list[int] = []
         for i in range(n_tokens):
             generated.append(nxt)

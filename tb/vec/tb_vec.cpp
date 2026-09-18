@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 #include "Vtb_vec_top.h"
 #include "Vtb_vec_top___024root.h"
@@ -100,6 +101,7 @@ void put16(uint8_t* m, uint32_t addr, int16_t v) { m[addr] = uint8_t(v & 0xFF); 
 int16_t get16(const uint8_t* m, uint32_t addr) { return int16_t(uint16_t(m[addr]) | (uint16_t(m[addr + 1]) << 8)); }
 
 uint32_t place(Rng& r, uint32_t region, uint32_t need) {
+  if (need > kRegSize) throw std::runtime_error("vector fixture region too small");
   uint32_t slots = (kRegSize - need) / 16;
   return region + 16 * r.range(0, slots);
 }
@@ -207,8 +209,9 @@ CaseResult run_rmsnorm(Tb& tb, Rng& r, uint8_t deny, bool directed_k128 = false)
   return {cyc, uint64_t(M) * K / 16, ok, stalls};
 }
 
-CaseResult run_rope(Tb& tb, Rng& r, uint8_t deny) {
-  uint32_t M = r.range(1, 16), H = r.range(1, 8), D = r.pick<uint32_t>({16, 32, 64});
+CaseResult run_rope(Tb& tb, Rng& r, uint8_t deny, uint32_t directedD = 0) {
+  uint32_t M = r.range(1, 16), H = r.range(1, 8), D = r.pick<uint32_t>({16, 32, 64, 128, 256});
+  if (directedD) { D = directedD; M = 16; H = 3; }
   uint32_t pos = r.range(0, 256 - M);
   uint32_t stride = 2 * D + 16 * r.range(0, 3);
   uint32_t bytes = M * H * D * 2;
@@ -290,6 +293,13 @@ int main(int argc, char** argv) {
     std::printf("RMSNORM directed M=1 K=128 deny=0: %ld cycles accept->done (%s)\n", cr.cycles, cr.ok ? "ok" : "FAIL");
     ++total_cases;
     if (!cr.ok) ++total_fail;
+  }
+  // Prepared, not executed: wide-head half-boundary and final-lane coverage.
+  for (uint32_t dim : {128u, 256u}) {
+    Rng r(seed + 1700 + dim);
+    auto cr = run_rope(tb, r, 30, dim);
+    std::printf("ROPE directed M=16 H=3 D=%u deny=30: %s\n", dim, cr.ok ? "ok" : "FAIL");
+    ++total_cases; if (!cr.ok) ++total_fail;
   }
   std::printf("tb_vec: %ld cases, %ld failures -> %s\n", total_cases, total_fail, total_fail ? "FAIL" : "PASS");
   tb.top.final();

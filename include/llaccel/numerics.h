@@ -14,7 +14,7 @@ namespace llaccel::num {
 
 inline constexpr int64_t rshr(int64_t v, uint32_t s) {
   if (s == 0) return v;
-  return (v + (int64_t(1) << (s - 1))) >> s;
+  return (v >> s) + int64_t((uint64_t(v) >> (s - 1)) & 1);
 }
 inline constexpr int64_t sat8(int64_t v) { return std::clamp<int64_t>(v, -128, 127); }
 inline constexpr int64_t satu8(int64_t v) { return std::clamp<int64_t>(v, 0, 255); }
@@ -88,7 +88,7 @@ inline void rope(std::span<const int16_t> x, std::span<int16_t> y, uint32_t H, u
 template <class KeyFn, class ValFn>
 inline void attention_head(std::span<const int8_t> q, uint32_t D, uint32_t T, KeyFn keyAt, ValFn valAt,
                            uint32_t Ms, uint32_t Ss, uint32_t Mo, uint32_t So, std::span<int8_t> out,
-                           std::vector<int32_t>& scores, std::vector<uint16_t>& probs) {
+                           std::vector<int32_t>& scores, std::vector<uint16_t>& probs, bool wideProb = false) {
   scores.resize(T);
   probs.resize(T);
   int32_t mx = INT32_MIN;
@@ -110,11 +110,13 @@ inline void attention_head(std::span<const int8_t> q, uint32_t D, uint32_t T, Ke
   uint32_t inv = udiv(uint64_t(1) << 31, sum);
   std::vector<int32_t> o(D, 0);
   for (uint32_t t = 0; t < T; ++t) {
-    uint32_t pn = uint32_t(satu8((int64_t(probs[t]) * int64_t(inv) + (int64_t(1) << 22)) >> 23));
+    uint32_t pn = wideProb
+        ? uint32_t(std::min<int64_t>(32767, rshr(int64_t(probs[t]) * inv, 16)))
+        : uint32_t(satu8(rshr(int64_t(probs[t]) * inv, 23)));
     const int8_t* v = valAt(t);
     for (uint32_t d = 0; d < D; ++d) o[d] += int32_t(pn) * int32_t(v[d]);
   }
-  for (uint32_t d = 0; d < D; ++d) out[d] = int8_t(sat8(mulshift(o[d], Mo, So)));
+  for (uint32_t d = 0; d < D; ++d) out[d] = int8_t(sat8(mulshift(wideProb ? rshr(o[d], 7) : o[d], Mo, So)));
 }
 
 }  // namespace llaccel::num
